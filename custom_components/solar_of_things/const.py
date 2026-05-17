@@ -230,8 +230,8 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
     {
         "key": "batteryConstantChargingVoltageSetting",
         "name": "Bulk Voltage",
-        "min": 24,
-        "max": 30,
+        "min": 48,
+        "max": 61,
         "step": 0.1,
         "unit": "V",
         "device_class": "voltage",
