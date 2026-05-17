@@ -157,7 +157,7 @@ class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
             f"{DOMAIN}_{station_id}_{device_id}_maximum_total_charging_current"
         )
         self._attr_native_min_value = 10
-        self._attr_native_max_value = 120
+        self._attr_native_max_value = 160
         self._attr_native_step = 10
         self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
         self._attr_mode = NumberMode.BOX
