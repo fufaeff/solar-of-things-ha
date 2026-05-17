@@ -976,8 +976,8 @@ class SolarOfThingsAPI:
         self._write_setting(device_id, "setMaxChargingCurrent", value)
 
     def set_max_utility_charge_current(self, device_id: str, value: int) -> None:
-        """Set Max Utility Charge Current (10-100 A)."""
-        self._write_setting(device_id, "maximumMainsChargingCurrentSetting", value)
+        """Set Max Utility Charge Current (10-140 A)."""
+        self._write_setting(device_id, "setUtilityMaxChargingCurrent", value)
 
     # ─── New setting setters ──────────────────────────────────────────────────
 
