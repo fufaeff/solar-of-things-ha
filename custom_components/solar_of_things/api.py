@@ -972,8 +972,8 @@ class SolarOfThingsAPI:
         self._write_setting(device_id, "outputSourcePrioritySetting", value)
 
     def set_maximum_total_charging_current(self, device_id: str, value: int) -> None:
-        """Set Maximum Total Charging Current (10-120 A)."""
-        self._write_setting(device_id, "maximumChargingCurrentSetting", value)
+        """Set Maximum Total Charging Current (10-160 A)."""
+        self._write_setting(device_id, "setMaxChargingCurrent", value)
 
     def set_max_utility_charge_current(self, device_id: str, value: int) -> None:
         """Set Max Utility Charge Current (10-100 A)."""
