@@ -662,7 +662,7 @@ class SolarOfThingsAPI:
         if "acOutputActivePower" in latest_values:
             try:
                 latest_values["acOutputActivePower"] = (
-                    float(float(latest_values["acOutputActivePower"])) * 1000.0
+                    float(latest_values["acOutputActivePower"]) * 1000.0
                 )
             except Exception:
                 pass
