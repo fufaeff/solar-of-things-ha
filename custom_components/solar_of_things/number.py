@@ -172,7 +172,7 @@ class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
 
 
 class SolarOfThingsMaxUtilityChargeCurrentNumber(_BaseNumber):
-    _setting_key = "maximumMainsChargingCurrentSetting"
+    _setting_key = "setUtilityMaxChargingCurrent"
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
