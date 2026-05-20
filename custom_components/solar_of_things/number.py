@@ -146,7 +146,7 @@ class _BaseNumber(CoordinatorEntity, NumberEntity):
 
 
 class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
-    _setting_key = "maximumChargingCurrentSetting"
+    _setting_key = "setMaxChargingCurrent"
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
