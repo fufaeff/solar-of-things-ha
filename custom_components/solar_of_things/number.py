@@ -160,7 +160,7 @@ class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
         self._attr_native_max_value = 160
         self._attr_native_step = 10
         self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-        self._attr_mode = NumberMode.BOX
+        self._attr_mode = NumberMode.SLIDER
         self._attr_device_class = NumberDeviceClass.CURRENT
         self._attr_icon = "mdi:battery-arrow-up"
 
