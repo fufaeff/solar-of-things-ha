@@ -362,7 +362,7 @@ class SolarOfThingsBatteryEqualizationVoltageNumber(_BaseNumber):
 
 
 class SolarOfThingsBatteryFloatChargingVoltageNumber(_BaseNumber):
-    _setting_key = "batteryFloatChargingVoltageSetting"
+    _setting_key = "setBatteryFloatChargingVoltage"
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -372,8 +372,8 @@ class SolarOfThingsBatteryFloatChargingVoltageNumber(_BaseNumber):
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_float_charging_voltage"
         )
-        self._attr_native_min_value = 24
-        self._attr_native_max_value = 30
+        self._attr_native_min_value = 48
+        self._attr_native_max_value = 61
         self._attr_native_step = 0.1
         self._attr_native_unit_of_measurement = "V"
         self._attr_mode = NumberMode.BOX

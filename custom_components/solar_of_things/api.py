@@ -1021,7 +1021,7 @@ class SolarOfThingsAPI:
 
     def set_battery_float_charging_voltage(self, device_id: str, value: float) -> None:
         """Set Float Voltage (24-30 V)."""
-        self._write_setting(device_id, "batteryFloatChargingVoltageSetting", value)
+        self._write_setting(device_id, "setBatteryFloatChargingVoltage", value)
 
     def set_battery_recharge_voltage(self, device_id: str, value: float) -> None:
         """Set SBU Utility Takeover voltage (22-25.5 V)."""

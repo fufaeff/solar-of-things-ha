@@ -275,10 +275,10 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
         "icon": "mdi:battery-charging-high",
     },
     {
-        "key": "batteryFloatChargingVoltageSetting",
+        "key": "setBatteryFloatChargingVoltage",
         "name": "Float Voltage",
-        "min": 24,
-        "max": 30,
+        "min": 48,
+        "max": 61,
         "step": 0.1,
         "unit": "V",
         "device_class": "voltage",
