@@ -228,7 +228,7 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
         "icon": "mdi:battery-arrow-down",
     },
     {
-        "key": "batteryConstantChargingVoltageSetting",
+        "key": "setBatteryCVChargeVoltage",
         "name": "Bulk Voltage",
         "min": 48,
         "max": 61,
