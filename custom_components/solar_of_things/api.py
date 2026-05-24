@@ -993,7 +993,7 @@ class SolarOfThingsAPI:
         self, device_id: str, value: float
     ) -> None:
         """Set Bulk Voltage (24-30 V)."""
-        self._write_setting(device_id, "batteryConstantChargingVoltageSetting", value)
+        self._write_setting(device_id, "setBatteryCVChargeVoltage", value)
 
     def set_battery_equalization_interval(self, device_id: str, value: int) -> None:
         """Set Equalization interval (0-90 days)."""
