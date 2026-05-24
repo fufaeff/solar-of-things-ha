@@ -225,7 +225,7 @@ class SolarOfThingsBmsLockMachineBatteryCapacityNumber(_BaseNumber):
 
 
 class SolarOfThingsBatteryConstantChargingVoltageNumber(_BaseNumber):
-    _setting_key = "batteryConstantChargingVoltageSetting"
+    _setting_key = "setBatteryCVChargeVoltage"
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
