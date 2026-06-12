@@ -953,7 +953,7 @@ class SolarOfThingsAPI:
                 f"Unknown battery priority: {mode!r}. "
                 f"Valid options: {list(CHARGER_PRIORITY_MAP)!r}"
             )
-        self._write_setting(device_id, "chargerPrioritySetting", value)
+        self._write_setting(device_id, "chargerSourcePrioritySetting", value)
 
     def set_grid_charging(self, device_id: str, enabled: bool) -> None:
         """Set AC Input Range: Appliance (0, grid charging allowed) / UPS (1, bypass)."""
