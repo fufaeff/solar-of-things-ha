@@ -168,7 +168,7 @@ class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
 
     @property
     def current_option(self) -> str | None:
-        val = self._get_setting_value("chargerPrioritySetting")
+        val = self._get_setting_value("chargerSourcePrioritySetting")
         if val is None:
             return None
         return CHARGER_PRIORITY_BY_VALUE.get(val)
