@@ -152,7 +152,7 @@ class SolarOfThingsOperatingModeSelect(_BaseSelect):
 
 
 class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
-    """Select entity for Charger Source Priority (chargerPrioritySetting).
+    """Select entity for Charger Source Priority (chargerSourcePrioritySetting).
 
     Reflects the real device API key.  Values 0/1/2 map to CSO/SNU/OSO.
     """
