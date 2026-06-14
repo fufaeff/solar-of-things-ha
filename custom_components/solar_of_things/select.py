@@ -125,7 +125,7 @@ class _BaseSelect(CoordinatorEntity, SelectEntity):
 class SolarOfThingsOperatingModeSelect(_BaseSelect):
     """Select entity for Output Source Priority (outputSourcePrioritySetting).
 
-    Reflects the real device API key.  Values 0/1/2 map to USO/SUB/SBU.
+    Reflects the real device API key.  Values 0/1/2 map to USB/SUB/SBU.
     """
 
     def __init__(

@@ -154,10 +154,10 @@ SENSOR_DEFINITIONS = {
 
 # Operating-mode select maps HA option strings to integer values
 OUTPUT_MODE_MAP: dict[str, int] = {
-    "Solar First (SUB)": 0,
-    "Solar+Battery First (SBU)": 1,
-    "Solar+Battery+Grid (SUF)": 2,
-    "Power Export Control (PEC)": 3,
+    "Utility -> Solar -> Battery (USB)": 0,
+    "Solar + Utility -> Battery (SUB)": 1,
+    "Solar + Battery -> Utility (SBU)": 2,
+    # "Power Export Control (PEC)": 3,
 }
 OUTPUT_MODE_REVERSE: dict[int, str] = {v: k for k, v in OUTPUT_MODE_MAP.items()}
 
@@ -166,7 +166,7 @@ CHARGER_PRIORITY_MAP: dict[str, int] = {
     "Solar + Utility (CSO)": 0,
     "Solar First (SNU)": 1,
     "Solar Only (OSO)": 2,
-    "Solar residual (SOR)": 3,
+    # "Solar residual (SOR)": 3,
 }
 CHARGER_PRIORITY_REVERSE: dict[int, str] = {
     v: k for k, v in CHARGER_PRIORITY_MAP.items()
