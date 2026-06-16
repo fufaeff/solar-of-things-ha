@@ -163,8 +163,8 @@ OUTPUT_MODE_REVERSE: dict[int, str] = {v: k for k, v in OUTPUT_MODE_MAP.items()}
 
 # Charger-priority select
 CHARGER_PRIORITY_MAP: dict[str, int] = {
-    "Solar + Utility (CSO)": 0,
-    "Solar First (SNU)": 1,
+    "Solar First (CSO)": 0,
+    "Solar + Utility (SNU)": 1,
     "Solar Only (OSO)": 2,
     # "Solar residual (SOR)": 3,
 }
