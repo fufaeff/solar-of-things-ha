@@ -296,6 +296,44 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    # ── Options flow ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return SolarOfThingsOptionsFlowHandler(config_entry)
+
+
+class SolarOfThingsOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for Solar of Things."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_interval = self.config_entry.options.get("update_interval", 1)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "update_interval",
+                        default=current_interval,
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                }
+            ),
+        )
+
 
 # ─── Custom exceptions ─────────────────────────────────────────────────────────
 

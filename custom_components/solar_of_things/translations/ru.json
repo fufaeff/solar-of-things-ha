@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Добавить станцию Solar of Things",
+        "description": "Выберите способ авторизации на портале Siseli.\n\n**User ID + Пароль** (рекомендуется) — интеграция выполняет вход автоматически и обновляет токен без ручных действий.\n\n**IOT Token** — для опытных пользователей или если вы предпочитаете не сохранять пароль в Home Assistant.\n\nПодробнее: {docs_url}",
+        "data": {
+          "auth_mode": "Способ авторизации"
+        }
+      },
+      "password": {
+        "title": "Solar of Things — User ID + Пароль",
+        "description": "Введите учетные данные портала Siseli и Station ID.\n\n- **User ID**: логин/аккаунт на https://solar.siseli.com\n- **Station ID**: 18-значный номер станции из запросов API (DevTools → Network)\n- **Device ID**: опционально — оставьте пустым для автообнаружения всех инверторов станции\n- **Часовой пояс**: должен совпадать с часовым поясом инвертора\n\nПодробнее: {docs_url}",
+        "data": {
+          "password": "Пароль",
+          "station_id": "Station ID (обязательно)",
+          "device_id": "Device ID (опционально — пусто для автопоиска)",
+          "time_zone": "Часовой пояс (например Asia/Manila)",
+          "user_id": "User ID / Аккаунт"
+        }
+      },
+      "token": {
+        "title": "Solar of Things — IOT Token",
+        "description": "Введите IOT-Token с https://solar.siseli.com (DevTools → Network → заголовки запросов).\n\nПримечание: срок действия токена ограничен. После истечения потребуется ввести новый.\n\nПодробнее: {docs_url}",
+        "data": {
+          "iot_token": "IOT Token",
+          "station_id": "Station ID (обязательно)",
+          "device_id": "Device ID (опционально — пусто для автопоиска)",
+          "time_zone": "Часовой пояс (например Asia/Manila)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Повторная авторизация Solar of Things",
+        "description": "Срок действия токена доступа истек. Введите обновленный пароль (или свежий IOT Token) для продолжения.",
+        "data": {
+          "password": "Пароль",
+          "iot_token": "Новый IOT Token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к API Solar of Things. Проверьте учетные данные, Station ID и доступ к сети.",
+      "invalid_auth": "Неверный User ID или пароль. Попробуйте снова.",
+      "unknown": "Непредвиденная ошибка. Проверьте журналы Home Assistant для подробностей."
+    },
+    "abort": {
+      "already_configured": "Эта станция уже настроена.",
+      "reauth_successful": "Повторная авторизация успешно завершена."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Параметры Solar of Things",
+        "data": {
+          "update_interval": "Интервал обновления (минуты)"
+        }
+      }
+    }
+  }
+}

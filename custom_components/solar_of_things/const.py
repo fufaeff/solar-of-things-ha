@@ -267,8 +267,8 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
     {
         "key": "batteryEqualizationVoltageSetting",
         "name": "Equalization Voltage",
-        "min": 24,
-        "max": 30,
+        "min": 48,
+        "max": 62,
         "step": 0.1,
         "unit": "V",
         "device_class": "voltage",
@@ -287,8 +287,8 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
     {
         "key": "batteryRechargeVoltageSetting",
         "name": "SBU Utility Takeover",
-        "min": 22,
-        "max": 25.5,
+        "min": 44,
+        "max": 54,
         "step": 0.5,
         "unit": "V",
         "device_class": "voltage",
@@ -297,8 +297,8 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
     {
         "key": "batteryRedischargeVoltageSetting",
         "name": "SBU Battery Takeover",
-        "min": 24,
-        "max": 29,
+        "min": 48,
+        "max": 58,
         "step": 0.5,
         "unit": "V",
         "device_class": "voltage",
@@ -335,8 +335,8 @@ NUMBER_SETTING_DEFINITIONS: list[dict] = [
     {
         "key": "lowBatteryAlarmVoltageSetting",
         "name": "Battery Low Alarm",
-        "min": 20,
-        "max": 27,
+        "min": 40,
+        "max": 54,
         "step": 0.1,
         "unit": "V",
         "device_class": "voltage",

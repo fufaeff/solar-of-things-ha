@@ -1,8 +1,8 @@
 # ☀️ Solar of Things — Home Assistant Integration
 
 <p align="center">
-  <a href="https://github.com/conexocasa/solar-of-things-ha/releases/latest">
-    <img src="https://img.shields.io/github/v/release/conexocasa/solar-of-things-ha?style=for-the-badge&label=Latest%20Release&color=orange" alt="Latest Release">
+  <a href="https://github.com/fufaeff/solar-of-things-ha/releases/latest">
+    <img src="https://img.shields.io/github/v/release/fufaeff/solar-of-things-ha?style=for-the-badge&label=Latest%20Release&color=orange" alt="Latest Release">
   </a>
   <a href="https://github.com/custom-components/hacs">
     <img src="https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge" alt="HACS Custom">
@@ -11,16 +11,16 @@
     <img src="https://img.shields.io/badge/Home%20Assistant-2023.1%2B-41BDF5?style=for-the-badge&logo=home-assistant" alt="Home Assistant">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/conexocasa/solar-of-things-ha?style=for-the-badge" alt="MIT License">
+    <img src="https://img.shields.io/github/license/fufaeff/solar-of-things-ha?style=for-the-badge" alt="MIT License">
   </a>
-  <a href="https://github.com/conexocasa/solar-of-things-ha/actions/workflows/validate.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/conexocasa/solar-of-things-ha/validate.yml?branch=main&style=for-the-badge&label=CI" alt="CI Status">
+  <a href="https://github.com/fufaeff/solar-of-things-ha/actions/workflows/validate.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/fufaeff/solar-of-things-ha/validate.yml?branch=master&style=for-the-badge&label=CI" alt="CI Status">
   </a>
 </p>
 
 <p align="center">
-  <strong>Monitor and control your Siseli solar inverter directly from Home Assistant.</strong><br>
-  Real-time power data · Battery management · Grid control · Energy Dashboard ready
+  <strong>Monitor and control your Siseli / Anern solar inverter directly from Home Assistant.</strong><br>
+  Real-time power data · Battery management · Grid control · 48V Anern MAX/EVO-10200 ready · Energy Dashboard
 </p>
 
 ---
@@ -59,13 +59,14 @@ The **Solar of Things** integration connects Home Assistant to the
 
 - **Auto-discovery** of every inverter device under your station — enter your
   Station ID once and Home Assistant finds all your devices automatically.
-- **10+ real-time sensors** for power, battery, grid and load data, updated
-  every 5 minutes.
+- **10+ real-time sensors** for power, battery, grid and load data, with configurable
+  update interval.
 - **4 monthly summary sensors** for energy totals and solar coverage.
-- **8 control entities** (sliders, dropdowns, switches) to manage battery
-  limits, operating modes and grid settings directly from HA.
+- **35 control entities** (sliders, dropdowns, switches) to manage battery
+  limits, voltages, operating modes and inverter hardware settings directly from HA.
 - Full compatibility with the **Home Assistant Energy Dashboard**.
 - **Multi-station support** — add the integration once per station.
+- **Anern MAX/EVO-10200 tested** — pre-calibrated for 48V battery systems and real hardware register mappings.
 
 > API behavior is based on the Siseli web portal and the reference CLI client
 > at [Hyllesen/solar-of-things-solar-usage](https://github.com/Hyllesen/solar-of-things-solar-usage).
@@ -77,9 +78,9 @@ The **Solar of Things** integration connects Home Assistant to the
 | Category | What you get |
 |---|---|
 | 🔍 **Auto-discovery** | Enter Station ID → HA fetches all device IDs automatically |
-| 📊 **Real-time monitoring** | 10 per-device sensors, updated every 5 min |
+| 📊 **Real-time monitoring** | 10+ per-device sensors + dynamic attributes |
 | 📅 **Monthly statistics** | 4 station-level energy summary sensors |
-| 🎛️ **System control** | 8 control entities (battery limits, modes, grid switches) |
+| 🎛️ **System control** | 35 control entities (17 numbers, 6 selects, 12 switches) |
 | ⚡ **Energy Dashboard** | All power and energy sensors are dashboard-ready |
 | 🏠 **Multi-station** | Unlimited stations via multiple config entries |
 | 🔒 **Secure auth** | User ID + Password login with automatic token refresh (no manual token copying) |
@@ -121,31 +122,57 @@ The **Solar of Things** integration connects Home Assistant to the
 ## Control Entities
 
 > Control entities require your device firmware/account to support the
-> settings API. If controls are unresponsive, see
-> [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+> remote settings API.
 
-### Number Entities (Sliders)
+### Number Entities (17 entities)
 
 | Entity | Range | Step | Unit | Description |
 |---|---|---|---|---|
-| `{device} Battery Charge Limit` | 0 – 100 | 1 | % | Maximum SOC target for charging |
-| `{device} Battery Discharge Limit` | 0 – 100 | 1 | % | Minimum SOC before stopping discharge |
-| `{device} Grid Charge Limit` | 0 – 5000 | 100 | W | Max grid power used for battery charging |
+| `{device} Maximum Total Charging Current` | 10 – 160 | 10 | A | Total maximum battery charging current |
+| `{device} Max Utility Charge Current` | 10 – 140 | 10 | A | Maximum AC/utility charging current |
+| `{device} Bulk Voltage` | 48.0 – 61.0 | 0.1 | V | Constant voltage charging limit |
+| `{device} Float Voltage` | 48.0 – 61.0 | 0.1 | V | Floating charge voltage |
+| `{device} SBU Utility Takeover` | 44.0 – 54.0 | 0.5 | V | Battery voltage threshold to switch to grid |
+| `{device} SBU Battery Takeover` | 48.0 – 58.0 | 0.5 | V | Battery voltage threshold to switch back to battery |
+| `{device} Equalization Voltage` | 48.0 – 62.0 | 0.1 | V | Battery equalization charge voltage |
+| `{device} Equalization Interval` | 0 – 90 | 1 | day | Equalization cycle interval |
+| `{device} Equalization Time` | 5 – 900 | 5 | min | Equalization active duration |
+| `{device} Equalization Timeout` | 5 – 900 | 5 | min | Equalization timeout |
+| `{device} Main Input Power` | 0.01 – 0.5 | 0.01 | kW | Zero CT feed-in power offset |
+| `{device} Maximum Battery Discharge Current` | 20 – 200 | 10 | A | Maximum battery discharge rate |
+| `{device} Battery Startup SOC` | 5 – 100 | 1 | % | Battery SOC required for inverter startup |
+| `{device} Battery Low Alarm` | 40.0 – 54.0 | 0.1 | V | Low battery alarm voltage threshold |
+| `{device} BMS Inverter Cutoff` | 5 – 95 | 5 | % | Minimum SOC cutoff when BMS enabled |
+| `{device} Battery DC Takeover` | 5 – 100 | 5 | % | Battery SOC takeover threshold |
+| `{device} Battery Mains Charging Takeover` | 5 – 95 | 5 | % | Mains charging SOC takeover threshold |
 
 ### Select Entities (Dropdowns)
 
 | Entity | Options | Description |
 |---|---|---|
-| `{device} Operating Mode` | Self-Use · Time-of-Use · Backup · Grid-Tie · Off-Grid | System operating strategy |
-| `{device} Battery Priority` | Solar First · Battery First · Grid First | Energy source priority order |
+| `{device} Output Source Priority` | `Utility -> Solar -> Battery (USB)` · `Solar + Utility -> Battery (SUB)` · `Solar + Battery -> Utility (SBU)` | Inverter power output routing priority |
+| `{device} Charger Source Priority` | `Solar First (CSO)` · `Solar + Utility (SNU)` · `Solar Only (OSO)` | Battery charging source priority |
+| `{device} Battery Type` | `AGM` · `FLD` · `USE` · `LIA` · `PYL` · `TQF` · `GRO` · `LIB` · `LIC` · `FEL` | Battery chemistry profile |
+| `{device} Output Frequency` | `50 Hz` · `60 Hz` | AC output frequency |
+| `{device} Output Voltage` | `220 V` · `230 V` · `240 V` | AC output voltage |
+| `{device} Grid Connection Type` | Safety grid protocol standards | Grid voltage & frequency safety regulation |
 
-### Switch Entities
+### Switch Entities (12 switches)
 
 | Entity | Description |
 |---|---|
-| `{device} Grid Charging` | Allow/deny battery charging from the grid |
-| `{device} Grid Feed-In` | Allow/deny exporting excess power to the grid |
-| `{device} Backup Mode` | Reserve battery capacity for power outages |
+| `{device} Grid Charging` | AC Input Range (0 = Appliance mode, grid charging allowed; 1 = UPS bypass) |
+| `{device} Grid Feed-In` | Enable/disable exporting excess battery/solar power to utility |
+| `{device} Backup Mode` | Quick toggle to SBU priority mode |
+| `{device} BMS Enabled` | Enable/disable BMS communication |
+| `{device} Equalization Enabled` | Enable/disable battery equalization mode |
+| `{device} LCD Backlight` | Inverter display backlight toggle |
+| `{device} Buzzer` | Inverter alarm buzzer toggle |
+| `{device} LCD Auto Homepage` | Inverter display auto return to homepage |
+| `{device} ECO Mode` | Inverter energy-saving standby mode |
+| `{device} Input Source Change Beep` | Prompt sound when input source switches |
+| `{device} Overheat Restart` | Automatic restart when over-temperature clears |
+| `{device} Overload Bypass` | Automatic bypass when overloaded |
 
 ---
 

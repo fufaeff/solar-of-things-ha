@@ -20,27 +20,24 @@ jobs:
       - name: Read version from manifest
         id: version
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+          VERSION=$(python3 -c "import json; print(json.load(open('custom_components/solar_of_things/manifest.json'))['version'])")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build HACS release ZIP
         run: |
           STAGE=release_stage
-          mkdir -p "$STAGE/custom_components/solar_of_things/translations"
+          mkdir -p "$STAGE"
 
-          # Integration source files
-          for f in __init__.py api.py config_flow.py const.py \
-                   sensor.py number.py select.py switch.py \
-                   manifest.json strings.json; do
-            cp "$f" "$STAGE/custom_components/solar_of_things/$f"
-          done
-          cp translations/en.json "$STAGE/custom_components/solar_of_things/translations/en.json"
+          # Copy custom_components directory structure
+          cp -r custom_components "$STAGE/"
 
           # Root-level metadata / docs
           for f in hacs.json README.md LICENSE CHANGELOG.md \
                    INSTALLATION.md QUICKSTART.md \
                    CONTROL_FEATURES.md EXAMPLES.md; do
-            cp "$f" "$STAGE/$f"
+            if [ -f "$f" ]; then
+              cp "$f" "$STAGE/$f"
+            fi
           done
 
           cd "$STAGE"

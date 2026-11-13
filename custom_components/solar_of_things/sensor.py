@@ -155,13 +155,22 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         latest = (self.coordinator.data or {}).get("latest_state") or {}
         info = latest.get(self._sensor_key)
-        if info is None or info.get("value") is None:
-            return None
-        try:
-            val = info["value"]
-            return round(float(val), 2)
-        except Exception:
-            return None
+        if info is not None and info.get("value") is not None:
+            try:
+                return round(float(info["value"]), 2)
+            except (ValueError, TypeError):
+                return info["value"]
+
+        # Fallback to time_series for calculated values (batteryPower, gridPower, loadPower)
+        ts = (self.coordinator.data or {}).get("time_series") or {}
+        val = ts.get(self._sensor_key)
+        if val is not None:
+            try:
+                return round(float(val), 2)
+            except (ValueError, TypeError):
+                return val
+
+        return None
 
 
 class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
@@ -204,12 +213,11 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        latest = (self.coordinator.data or {}).get("latest_state") or {}
-        info = latest.get(self._sensor_key)
-        if info is None or info.get("value") is None:
+        monthly = (self.coordinator.data or {}).get("monthly") or {}
+        val = monthly.get(self._sensor_key)
+        if val is None:
             return None
         try:
-            val = info["value"]
             return round(float(val), 2)
-        except Exception:
-            return None
+        except (ValueError, TypeError):
+            return val

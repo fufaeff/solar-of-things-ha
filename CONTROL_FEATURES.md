@@ -10,40 +10,38 @@ The Solar of Things integration now supports **full control** of your solar syst
 
 ### Select Entities (Dropdowns)
 
-#### 1. **Operating Mode**
+#### 1. **Output Source Priority**
 - **Type**: Select
 - **Options**:
-  - **Self-Use**: Maximize self-consumption
-  - **Time-of-Use**: Optimize for electricity rates
-  - **Backup**: Prioritize battery reserve
-  - **Grid-Tie**: Prioritize grid export
-  - **Off-Grid**: Independent operation
-- **Entity**: `select.solar_station_xxxxx_operating_mode`
+  - `Utility -> Solar -> Battery (USB)`: Utility supplies loads as first priority, solar/battery when utility fails
+  - `Solar + Utility -> Battery (SUB)`: Solar energy supplies loads first; utility supplements if solar is insufficient; battery only when utility fails
+  - `Solar + Battery -> Utility (SBU)`: Solar energy supplies loads first; battery is second; utility only when battery reaches cutoff
+- **Entity**: `select.<device_name>_output_source_priority`
 
 ```yaml
-# Switch to Time-of-Use mode
+# Switch to SBU mode
 service: select.select_option
 target:
-  entity_id: select.solar_station_xxxxx_operating_mode
+  entity_id: select.my_inverter_output_source_priority
 data:
-  option: "Time-of-Use"
+  option: "Solar + Battery -> Utility (SBU)"
 ```
 
-#### 2. **Battery Priority**
+#### 2. **Charger Source Priority**
 - **Type**: Select
 - **Options**:
-  - **Solar First**: Use solar before battery
-  - **Battery First**: Use battery before solar
-  - **Grid First**: Use grid before battery/solar
-- **Entity**: `select.solar_station_xxxxx_battery_priority`
+  - `Solar First (CSO)`: Solar charges battery first; utility charges only when solar is unavailable
+  - `Solar + Utility (SNU)`: Solar and utility charge battery simultaneously
+  - `Solar Only (OSO)`: Solar energy is the only charger source
+- **Entity**: `select.<device_name>_charger_source_priority`
 
 ```yaml
-# Prioritize solar energy
+# Prioritize solar charging
 service: select.select_option
 target:
-  entity_id: select.solar_station_xxxxx_battery_priority
+  entity_id: select.my_inverter_charger_source_priority
 data:
-  option: "Solar First"
+  option: "Solar First (CSO)"
 ```
 
 ---
@@ -62,18 +60,18 @@ automation:
         entity_id: sensor.electricity_price
         above: 0.25  # High price threshold
     action:
-      - service: select.select_action
-        target:
-          entity_id: select.solar_station_xxxxx_operating_mode
-        data:
-          option: "Time-of-Use"
-      
-      # Maximize battery usage during peak
       - service: select.select_option
         target:
-          entity_id: select.solar_station_xxxxx_battery_priority
+          entity_id: select.my_inverter_output_source_priority
         data:
-          option: "Battery First"
+          option: "Solar + Battery -> Utility (SBU)"
+      
+      # Charge only from solar during peak grid rate
+      - service: select.select_option
+        target:
+          entity_id: select.my_inverter_charger_source_priority
+        data:
+          option: "Solar Only (OSO)"
 
   - alias: "Solar: Off-Peak Mode"
     trigger:
@@ -83,16 +81,16 @@ automation:
     action:
       - service: select.select_option
         target:
-          entity_id: select.solar_station_xxxxx_operating_mode
+          entity_id: select.my_inverter_output_source_priority
         data:
-          option: "Self-Use"
+          option: "Solar + Utility -> Battery (SUB)"
       
-      # Prioritize solar during off-peak
+      # Allow grid + solar charging during cheap night rate
       - service: select.select_option
         target:
-          entity_id: select.solar_station_xxxxx_battery_priority
+          entity_id: select.my_inverter_charger_source_priority
         data:
-          option: "Solar First"
+          option: "Solar + Utility (SNU)"
 ```
 
 ---

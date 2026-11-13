@@ -303,8 +303,8 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.3.0 "
-                    "(+https://github.com/conexocasa/solar-of-things-ha)"
+                    "HomeAssistant-SolarOfThings/2.3.5 "
+                    "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
         )
@@ -816,9 +816,9 @@ class SolarOfThingsAPI:
             )
             return self.fetch_settings(device_id)
 
-        # Step 2: Poll for results (with ~5 second delays between requests)
-        max_poll_attempts = 30  # ~150 seconds total timeout
-        poll_delay = 5  # seconds
+        # Step 2: Poll for results (with ~2.5 second delays between requests, ~20s total max)
+        max_poll_attempts = 8
+        poll_delay = 2.5  # seconds
 
         for attempt in range(1, max_poll_attempts + 1):
             time.sleep(poll_delay)
@@ -992,7 +992,7 @@ class SolarOfThingsAPI:
     def set_battery_constant_charging_voltage(
         self, device_id: str, value: float
     ) -> None:
-        """Set Bulk Voltage (24-30 V)."""
+        """Set Bulk Voltage (48-61 V)."""
         self._write_setting(device_id, "setBatteryCVChargeVoltage", value)
 
     def set_battery_equalization_interval(self, device_id: str, value: int) -> None:
@@ -1016,19 +1016,19 @@ class SolarOfThingsAPI:
         self._write_setting(device_id, "batteryEqualizationTimeoutSetting", value)
 
     def set_battery_equalization_voltage(self, device_id: str, value: float) -> None:
-        """Set Equalization voltage (24-30 V)."""
+        """Set Equalization voltage (48-62 V)."""
         self._write_setting(device_id, "batteryEqualizationVoltageSetting", value)
 
     def set_battery_float_charging_voltage(self, device_id: str, value: float) -> None:
-        """Set Float Voltage (24-30 V)."""
+        """Set Float Voltage (48-61 V)."""
         self._write_setting(device_id, "setBatteryFloatChargingVoltage", value)
 
     def set_battery_recharge_voltage(self, device_id: str, value: float) -> None:
-        """Set SBU Utility Takeover voltage (22-25.5 V)."""
+        """Set SBU Utility Takeover voltage (44-54 V)."""
         self._write_setting(device_id, "batteryRechargeVoltageSetting", value)
 
     def set_battery_redischarge_voltage(self, device_id: str, value: float) -> None:
-        """Set SBU Battery Takeover voltage (24-29 V)."""
+        """Set SBU Battery Takeover voltage (48-58 V)."""
         self._write_setting(device_id, "batteryRedischargeVoltageSetting", value)
 
     def set_battery_type(self, device_id: str, mode: str) -> None:
@@ -1054,7 +1054,7 @@ class SolarOfThingsAPI:
         self._write_setting(device_id, "inverterStartupBatteryCapacity", value)
 
     def set_low_battery_alarm_voltage(self, device_id: str, value: float) -> None:
-        """Set Battery Low Alarm voltage (20-27 V)."""
+        """Set Battery Low Alarm voltage (40-54 V)."""
         self._write_setting(device_id, "lowBatteryAlarmVoltageSetting", value)
 
     def set_rated_frequency(self, device_id: str, mode: str) -> None:

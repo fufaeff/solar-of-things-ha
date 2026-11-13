@@ -1,13 +1,15 @@
 {
   "domain": "solar_of_things",
   "name": "Solar of Things",
-  "codeowners": [],
+  "codeowners": [
+    "@fufaeff"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/conexocasa/solar-of-things-ha",
+  "documentation": "https://github.com/fufaeff/solar-of-things-ha",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/conexocasa/solar-of-things-ha/issues",
+  "issue_tracker": "https://github.com/fufaeff/solar-of-things-ha/issues",
   "requirements": [
     "pycryptodome>=3.9.0"
   ],
-  "version": "2.3.3"
+  "version": "2.3.5"
 }

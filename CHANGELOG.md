@@ -1,4 +1,19 @@
-## [2.3.4] - 2024-05-15
+## [2.3.5] - 2026-06-16
+
+### Fixed
+- **Monthly Summary Sensors**: Fixed `SolarOfThingsStationMonthlySensor` to read from coordinator `monthly` statistics dictionary instead of non-existent `latest_state`.
+- **Derived Power Sensors**: Added fallback in `SolarOfThingsDeviceSensor` to `time_series` telemetry for calculated sensors (`batteryPower`, `gridPower`, `loadPower`).
+- **CI/CD GitHub Actions**: Fixed paths in `.github/workflows/validate.yml` and `.github/workflows/release.yml` to target `custom_components/solar_of_things/` following repository reorganization; added `master` branch trigger.
+- **48V Battery Calibration (Anern MAX/EVO-10200)**: Calibrated voltage setting ranges for 48V battery systems in `const.py`, `number.py`, and `api.py`:
+  - `batteryEqualizationVoltageSetting`: 48–62 V (was 24–30 V)
+  - `batteryRechargeVoltageSetting` (SBU Utility Takeover): 44–54 V (was 22–25.5 V)
+  - `batteryRedischargeVoltageSetting` (SBU Battery Takeover): 48–58 V (was 24–29 V)
+  - `lowBatteryAlarmVoltageSetting` (Battery Low Alarm): 40–54 V (was 20–27 V)
+
+### Changed
+- Bumped manifest version and `api.py` User-Agent to 2.3.5.
+
+## [2.3.4] - 2026-05-15
 
 ### Changed
 - **HACS Repository Structure**: Adjusted the repository structure to be compliant with HACS standards by moving integration files into `custom_components/solar_of_things/`. (by filipsworks)

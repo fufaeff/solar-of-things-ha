@@ -2,9 +2,9 @@ name: Validate
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   lint:
@@ -29,7 +29,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, sys
-          m = json.load(open("manifest.json"))
+          m = json.load(open("custom_components/solar_of_things/manifest.json"))
           required = ["domain","name","version","config_flow","iot_class","requirements"]
           missing = [k for k in required if k not in m]
           if missing:
@@ -55,16 +55,25 @@ jobs:
         run: |
           python3 - <<'PY'
           import json
-          s = json.load(open("strings.json"))
-          t = json.load(open("translations/en.json"))
+          s = json.load(open("custom_components/solar_of_things/strings.json"))
+          t = json.load(open("custom_components/solar_of_things/translations/en.json"))
+          r = json.load(open("custom_components/solar_of_things/translations/ru.json"))
           print("strings.json OK")
           print("translations/en.json OK")
+          print("translations/ru.json OK")
           PY
 
       - name: Check Python syntax (all .py files)
         run: |
-          python3 -m py_compile __init__.py api.py config_flow.py \
-            const.py sensor.py number.py select.py switch.py
+          python3 -m py_compile \
+            custom_components/solar_of_things/__init__.py \
+            custom_components/solar_of_things/api.py \
+            custom_components/solar_of_things/config_flow.py \
+            custom_components/solar_of_things/const.py \
+            custom_components/solar_of_things/sensor.py \
+            custom_components/solar_of_things/number.py \
+            custom_components/solar_of_things/select.py \
+            custom_components/solar_of_things/switch.py
           echo "Python syntax OK"
 
       - name: Run unit tests (if present)

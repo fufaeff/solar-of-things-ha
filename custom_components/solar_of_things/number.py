@@ -344,8 +344,8 @@ class SolarOfThingsBatteryEqualizationVoltageNumber(_BaseNumber):
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_equalization_voltage"
         )
-        self._attr_native_min_value = 24
-        self._attr_native_max_value = 30
+        self._attr_native_min_value = 48
+        self._attr_native_max_value = 62
         self._attr_native_step = 0.1
         self._attr_native_unit_of_measurement = "V"
         self._attr_mode = NumberMode.BOX
@@ -400,8 +400,8 @@ class SolarOfThingsBatteryRechargeVoltageNumber(_BaseNumber):
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_recharge_voltage"
         )
-        self._attr_native_min_value = 22
-        self._attr_native_max_value = 25.5
+        self._attr_native_min_value = 44
+        self._attr_native_max_value = 54
         self._attr_native_step = 0.5
         self._attr_native_unit_of_measurement = "V"
         self._attr_mode = NumberMode.BOX
@@ -428,8 +428,8 @@ class SolarOfThingsBatteryRedischargeVoltageNumber(_BaseNumber):
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_redischarge_voltage"
         )
-        self._attr_native_min_value = 24
-        self._attr_native_max_value = 29
+        self._attr_native_min_value = 48
+        self._attr_native_max_value = 58
         self._attr_native_step = 0.5
         self._attr_native_unit_of_measurement = "V"
         self._attr_mode = NumberMode.BOX
@@ -536,8 +536,8 @@ class SolarOfThingsLowBatteryAlarmVoltageNumber(_BaseNumber):
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_low_battery_alarm_voltage"
         )
-        self._attr_native_min_value = 20
-        self._attr_native_max_value = 27
+        self._attr_native_min_value = 40
+        self._attr_native_max_value = 54
         self._attr_native_step = 0.1
         self._attr_native_unit_of_measurement = "V"
         self._attr_mode = NumberMode.BOX

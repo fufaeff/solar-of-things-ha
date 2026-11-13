@@ -174,8 +174,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "devices": devices,
     }
 
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload config entry when options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -249,11 +256,12 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         self.device_meta = device_meta
         self._entry = entry
         self._is_first_refresh = True
+        interval_min = entry.options.get("update_interval", 1)
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_device_{device}",
-            update_interval=DEVICE_UPDATE_INTERVAL,
+            update_interval=timedelta(minutes=interval_min),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
