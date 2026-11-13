@@ -275,8 +275,8 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             except TokenExpiredError:
                 raise
             except Exception as ts_err:
-                _LOGGER.warning(
-                    "SolarOfThings device %s: timeseries fetch warning (%s), falling back to latest state",
+                _LOGGER.debug(
+                    "SolarOfThings device %s: timeseries fetch unavailable (%s), falling back to latest state",
                     self.device_id,
                     ts_err,
                 )
@@ -337,22 +337,28 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                         calc_err,
                     )
 
-            # On first refresh, use batch read to get ALL settings at once.
-            # Subsequent updates use the fast cached endpoint to avoid rate limits.
-            if self._is_first_refresh:
+            # Retrieve settings from fast cached cloud endpoint
+            settings = await self.hass.async_add_executor_job(
+                self.api.fetch_settings, self.device_id
+            )
+            # If cached settings are completely empty on first run, attempt batch read fallback
+            if not settings and self._is_first_refresh:
                 _LOGGER.debug(
-                    "SolarOfThings device %s: using batch read for initial settings",
+                    "SolarOfThings device %s: cached settings empty, attempting batch read",
                     self.device_id,
                 )
-                settings = await self.hass.async_add_executor_job(
-                    self.api.fetch_settings_batch, self.device_id
-                )
-                self._is_first_refresh = False
-            else:
-                # Periodic refresh — use cached endpoint (fast, no rate limit issues)
-                settings = await self.hass.async_add_executor_job(
-                    self.api.fetch_settings, self.device_id
-                )
+                try:
+                    settings = await self.hass.async_add_executor_job(
+                        self.api.fetch_settings_batch, self.device_id
+                    )
+                except Exception as batch_err:
+                    _LOGGER.debug(
+                        "SolarOfThings device %s: batch read fallback failed: %s",
+                        self.device_id,
+                        batch_err,
+                    )
+
+            self._is_first_refresh = False
 
             return {
                 "time_series": time_series,

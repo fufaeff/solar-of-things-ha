@@ -303,7 +303,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.3.6 "
+                    "HomeAssistant-SolarOfThings/2.3.7 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -888,10 +888,11 @@ class SolarOfThingsAPI:
             data = resp.json()
 
             if data.get("code") not in (0, None):
-                _LOGGER.warning(
-                    "SolarOfThings device %s: batch read poll error on attempt %d: %s",
+                _LOGGER.debug(
+                    "SolarOfThings device %s: batch read poll on attempt %d returned code=%s message=%s",
                     device_id,
                     attempt,
+                    data.get("code"),
                     data.get("message"),
                 )
                 continue
@@ -904,11 +905,10 @@ class SolarOfThingsAPI:
                 return self._extract_settings_from_batch(result_data)
 
         # Timeout — fall back to cached settings
-        _LOGGER.warning(
-            "SolarOfThings device %s: batch read timed out after %d attempts, "
+        _LOGGER.debug(
+            "SolarOfThings device %s: batch read finished without complete response, "
             "falling back to cached settings",
             device_id,
-            max_poll_attempts,
         )
         return self.fetch_settings(device_id)
 
