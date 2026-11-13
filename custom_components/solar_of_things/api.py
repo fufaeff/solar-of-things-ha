@@ -303,7 +303,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.4.0 "
+                    "HomeAssistant-SolarOfThings/2.4.1 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }

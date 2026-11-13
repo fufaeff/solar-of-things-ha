@@ -15,7 +15,9 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
+    UnitOfFrequency,
     UnitOfPower,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -116,28 +118,66 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_{sensor_key}"
         self._attr_icon = sensor_definition.get("icon")
 
-        unit = sensor_definition.get("unit")
-        if unit == "W":
-            self._attr_device_class = SensorDeviceClass.POWER
-            self._attr_native_unit_of_measurement = UnitOfPower.WATT
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-        elif unit == "kWh":
+        unit_raw = str(sensor_definition.get("unit") or "").strip()
+        unit_lower = unit_raw.lower()
+        key_lower = sensor_key.lower()
+
+        # Energy (kWh, Wh, MWh, or keys indicating energy)
+        if unit_lower in ("kwh", "kilowatt-hour", "kilowatt_hour"):
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
             self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        elif unit == "A":
+        elif unit_lower in ("wh", "watt-hour", "watt_hour") or (
+            "energy" in key_lower and unit_lower not in ("w", "kw", "mw")
+        ):
+            self._attr_device_class = SensorDeviceClass.ENERGY
+            self._attr_native_unit_of_measurement = (
+                UnitOfEnergy.KILO_WATT_HOUR
+                if unit_lower == "kwh"
+                else UnitOfEnergy.WATT_HOUR
+            )
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        elif unit_lower in ("mwh",):
+            self._attr_device_class = SensorDeviceClass.ENERGY
+            self._attr_native_unit_of_measurement = UnitOfEnergy.MEGA_WATT_HOUR
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        # Power (W, kW)
+        elif unit_lower in ("w", "watt"):
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_native_unit_of_measurement = UnitOfPower.WATT
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif unit_lower in ("kw", "kilowatt"):
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        # Current (A)
+        elif unit_lower in ("a", "amp", "ampere"):
             self._attr_device_class = SensorDeviceClass.CURRENT
             self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        elif unit == "V":
+        # Voltage (V)
+        elif unit_lower in ("v", "volt"):
             self._attr_device_class = SensorDeviceClass.VOLTAGE
             self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
             self._attr_state_class = SensorStateClass.MEASUREMENT
-        elif unit == "%":
-            if "battery" in sensor_key.lower():
+        # Percentage (%)
+        elif unit_lower in ("%", "percent"):
+            if "battery" in key_lower or "soc" in key_lower:
                 self._attr_device_class = SensorDeviceClass.BATTERY
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_state_class = SensorStateClass.MEASUREMENT
+        # Frequency (Hz)
+        elif unit_lower in ("hz", "hertz"):
+            self._attr_device_class = SensorDeviceClass.FREQUENCY
+            self._attr_native_unit_of_measurement = UnitOfFrequency.HERTZ
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        # Temperature (°C, C, ℃)
+        elif unit_lower in ("°c", "c", "℃"):
+            self._attr_device_class = SensorDeviceClass.TEMPERATURE
+            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif unit_raw:
+            self._attr_native_unit_of_measurement = unit_raw
 
     @property
     def device_info(self):

@@ -126,6 +126,18 @@ SENSOR_DEFINITIONS = {
         "device_class": "power",
         "icon": "mdi:home-lightning-bolt",
     },
+    "pvInputTotalEnergy": {
+        "name": "PV Input Total Energy",
+        "unit": "Wh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
+    "pvInputEnergy": {
+        "name": "PV Input Energy",
+        "unit": "Wh",
+        "device_class": "energy",
+        "icon": "mdi:solar-power",
+    },
     # Monthly summary sensors
     "monthly_pv_generated": {
         "name": "Monthly PV Generated",
