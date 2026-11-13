@@ -236,6 +236,13 @@ class SolarOfThingsStationCoordinator(DataUpdateCoordinator):
             self._entry.async_start_reauth(self.hass)
             raise UpdateFailed(f"Token expired: {err}") from err
         except Exception as err:
+            if self.data:
+                _LOGGER.warning(
+                    "SolarOfThings station %s: update warning (%s), retaining previous data",
+                    self.station_id,
+                    err,
+                )
+                return self.data
             raise UpdateFailed(f"Station update failed: {err}") from err
 
 
@@ -281,9 +288,23 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                     ts_err,
                 )
 
-            latest_state = await self.hass.async_add_executor_job(
-                self.api.fetch_latest_state, self.device_id
-            )
+            latest_state = {}
+            try:
+                latest_state = await self.hass.async_add_executor_job(
+                    self.api.fetch_latest_state, self.device_id
+                )
+            except TokenExpiredError:
+                raise
+            except Exception as ls_err:
+                _LOGGER.warning(
+                    "SolarOfThings device %s: latest state fetch warning (%s)",
+                    self.device_id,
+                    ls_err,
+                )
+                if self.data and self.data.get("latest_state"):
+                    latest_state = self.data["latest_state"]
+                elif not time_series:
+                    raise
 
             # If timeseries failed or returned empty data, compute power metrics from latest_state
             if not time_series and latest_state:
@@ -337,10 +358,24 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                         calc_err,
                     )
 
+            if not time_series and self.data and self.data.get("time_series"):
+                time_series = self.data["time_series"]
+
             # Retrieve settings from fast cached cloud endpoint
-            settings = await self.hass.async_add_executor_job(
-                self.api.fetch_settings, self.device_id
-            )
+            settings = {}
+            try:
+                settings = await self.hass.async_add_executor_job(
+                    self.api.fetch_settings, self.device_id
+                )
+            except Exception as set_err:
+                _LOGGER.debug(
+                    "SolarOfThings device %s: settings fetch error (%s)",
+                    self.device_id,
+                    set_err,
+                )
+                if self.data and self.data.get("settings"):
+                    settings = self.data["settings"]
+
             # If cached settings are completely empty on first run, attempt batch read fallback
             if not settings and self._is_first_refresh:
                 _LOGGER.debug(
@@ -377,6 +412,13 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             self._entry.async_start_reauth(self.hass)
             raise UpdateFailed(f"Token expired: {err}") from err
         except Exception as err:
+            if self.data:
+                _LOGGER.warning(
+                    "SolarOfThings device %s: update warning (%s), retaining previous data",
+                    self.device_id,
+                    err,
+                )
+                return self.data
             raise UpdateFailed(
                 f"Device update failed for {self.device_id}: {err}"
             ) from err

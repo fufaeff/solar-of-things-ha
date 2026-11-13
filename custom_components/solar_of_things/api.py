@@ -303,7 +303,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.3.7 "
+                    "HomeAssistant-SolarOfThings/2.3.8 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -742,29 +742,44 @@ class SolarOfThingsAPI:
         return latest_values
 
     def fetch_latest_state(self, device: str) -> dict[str, Any]:
-        """Fetch the latest state (all fields) for a device via GET."""
+        """Fetch the latest state (all fields) for a device via GET with retry."""
         self._ensure_token_valid()
         url = f"{API_BASE_URL}{API_LATEST_STATE}?deviceId={device}"
-        resp = self.session.get(url, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
 
-        if data.get("code") not in (0, None):
-            raise RuntimeError(
-                f"Latest state error code={data.get('code')} "
-                f"message={data.get('message')}"
-            )
+        last_error: Exception | None = None
+        for attempt in range(2):
+            if attempt > 0:
+                time.sleep(1.5)
+            try:
+                resp = self.session.get(url, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
 
-        fields = (data.get("data") or {}).get("fields") or {}
-        latest_values: dict[str, Any] = {}
-        for key, field_info in fields.items():
-            latest_values[key] = {
-                "value": field_info.get("value"),
-                "unit": field_info.get("unit"),
-                "nameDisplay": field_info.get("nameDisplay"),
-            }
+                if data.get("code") not in (0, None):
+                    last_error = RuntimeError(
+                        f"Latest state error code={data.get('code')} "
+                        f"message={data.get('message')}"
+                    )
+                    continue
 
-        return latest_values
+                fields = (data.get("data") or {}).get("fields") or {}
+                latest_values: dict[str, Any] = {}
+                for key, field_info in fields.items():
+                    latest_values[key] = {
+                        "value": field_info.get("value"),
+                        "unit": field_info.get("unit"),
+                        "nameDisplay": field_info.get("nameDisplay"),
+                    }
+
+                return latest_values
+            except TokenExpiredError:
+                raise
+            except Exception as err:
+                last_error = err
+
+        if last_error:
+            raise last_error
+        return {}
 
     # ─── Monthly summary (station) ─────────────────────────────────────────────
 
