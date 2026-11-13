@@ -303,7 +303,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.3.8 "
+                    "HomeAssistant-SolarOfThings/2.4.0 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -631,18 +631,19 @@ class SolarOfThingsAPI:
     # ─── Station → device listing ──────────────────────────────────────────────
 
     def list_devices(
-        self, station_id: str, page_size: int = 50
+        self, station_id: str | None = None, page_size: int = 50
     ) -> list[dict[str, Any]]:
-        """Return all devices under a station (paginated)."""
+        """Return all devices under a station or under the entire account (paginated)."""
         devices: list[dict[str, Any]] = []
         page = 1
         total: int | None = None
 
         while True:
-            data = self._post(
-                API_DEVICE_LIST,
-                {"page": page, "count": page_size, "stationId": station_id},
-            )
+            payload: dict[str, Any] = {"page": page, "count": page_size}
+            if station_id:
+                payload["stationId"] = station_id
+
+            data = self._post(API_DEVICE_LIST, payload)
 
             if data.get("code") not in (0, None):
                 raise RuntimeError(
@@ -669,6 +670,34 @@ class SolarOfThingsAPI:
             page += 1
 
         return devices
+
+    def discover_stations(self) -> list[dict[str, Any]]:
+        """Discover all stations and their devices for this account.
+
+        Returns a list of dicts:
+          [{"station_id": str, "station_name": str, "devices": list[dict]}, ...]
+        """
+        all_devices = self.list_devices()
+        stations_map: dict[str, dict[str, Any]] = {}
+
+        for dev in all_devices:
+            st_id = str(dev.get("stationId") or dev.get("station_id") or "").strip()
+            st_name = str(
+                dev.get("stationName")
+                or dev.get("station_name")
+                or f"Station {st_id}"
+            ).strip()
+            if not st_id:
+                continue
+            if st_id not in stations_map:
+                stations_map[st_id] = {
+                    "station_id": st_id,
+                    "station_name": st_name,
+                    "devices": [],
+                }
+            stations_map[st_id]["devices"].append(dev)
+
+        return list(stations_map.values())
 
     # ─── Time-series (per device) ──────────────────────────────────────────────
 
@@ -1207,7 +1236,7 @@ class SolarOfThingsAPI:
         """Generic setter for toggle settings (writes 0 or 1)."""
         self._write_setting(device_id, key, 1 if enabled else 0)
 
-    def test_connection(self, station_id: str) -> bool:
+    def test_connection(self, station_id: str | None = None) -> bool:
         """Return True if we can reach the device-list endpoint successfully."""
         try:
             devices = self.list_devices(station_id, page_size=1)

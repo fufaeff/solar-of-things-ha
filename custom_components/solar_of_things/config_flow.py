@@ -42,7 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 # ─── Validation helpers ────────────────────────────────────────────────────────
 
 async def _validate_password_auth(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate user-ID/password auth, return title."""
+    """Validate user-ID/password auth, return title, station ID, and tokens."""
     api = SolarOfThingsAPI(
         user_id=data[CONF_USER_ID],
         password=data[CONF_PASSWORD],
@@ -55,13 +55,37 @@ async def _validate_password_auth(hass: HomeAssistant, data: dict[str, Any]) -> 
     except Exception as err:
         raise CannotConnect(str(err)) from err
 
-    # After login, validate station
-    ok = await hass.async_add_executor_job(api.test_connection, data[CONF_STATION_ID])
-    if not ok:
-        raise CannotConnect("Station/device unreachable after login.")
+    station_id = (data.get(CONF_STATION_ID) or "").strip()
+    stations: list[dict[str, Any]] = []
+
+    # Auto-discover station if not explicitly provided
+    if not station_id:
+        try:
+            stations = await hass.async_add_executor_job(api.discover_stations)
+        except Exception as err:
+            _LOGGER.error("Failed to discover stations: %s", err)
+            raise CannotConnect(f"Failed to discover stations: {err}") from err
+
+        if not stations:
+            raise CannotConnect("No stations or devices found for this account.")
+
+        if len(stations) == 1:
+            station_id = stations[0]["station_id"]
+
+    # If station_id is resolved, validate connection
+    if station_id:
+        ok = await hass.async_add_executor_job(api.test_connection, station_id)
+        if not ok:
+            raise CannotConnect("Station/device unreachable after login.")
+
+    title = f"Solar Station {station_id}" if station_id else "Solar Station"
+    if stations and len(stations) == 1 and stations[0].get("station_name"):
+        title = stations[0]["station_name"]
 
     return {
-        "title": f"Solar Station {data[CONF_STATION_ID]}",
+        "title": title,
+        "station_id": station_id,
+        "stations": stations,
         CONF_IOT_TOKEN: api.access_token,
         CONF_REFRESH_TOKEN: api.refresh_token,
         CONF_ACCESS_TOKEN_EXPIRES: api.access_token_expires_iso,
@@ -70,20 +94,37 @@ async def _validate_password_auth(hass: HomeAssistant, data: dict[str, Any]) -> 
 
 
 async def _validate_token_auth(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate legacy IOT-token auth, return title."""
+    """Validate legacy IOT-token auth, return title and station ID."""
     api = SolarOfThingsAPI(
         iot_token=data[CONF_IOT_TOKEN],
         time_zone=data.get(CONF_TIME_ZONE),
     )
-    station_id = data[CONF_STATION_ID]
+    station_id = (data.get(CONF_STATION_ID) or "").strip()
     device_id = (data.get(CONF_DEVICE_ID) or "").strip()
+    stations: list[dict[str, Any]] = []
+
+    # Auto-discover station if not explicitly provided
+    if not station_id and not device_id:
+        try:
+            stations = await hass.async_add_executor_job(api.discover_stations)
+        except Exception as err:
+            _LOGGER.error("Failed to discover stations with token: %s", err)
+            raise CannotConnect(f"Failed to discover stations: {err}") from err
+
+        if not stations:
+            raise CannotConnect("No stations or devices found with provided token.")
+
+        if len(stations) == 1:
+            station_id = stations[0]["station_id"]
 
     try:
         if device_id:
             res = await hass.async_add_executor_job(api.fetch_latest_data, device_id)
             ok = bool(res)
-        else:
+        elif station_id:
             ok = await hass.async_add_executor_job(api.test_connection, station_id)
+        else:
+            ok = bool(stations)
     except Exception as err:
         _LOGGER.error("Token validation failed: %s", err)
         ok = False
@@ -91,7 +132,15 @@ async def _validate_token_auth(hass: HomeAssistant, data: dict[str, Any]) -> dic
     if not ok:
         raise CannotConnect("Cannot connect with provided token.")
 
-    return {"title": f"Solar Station {station_id}"}
+    title = f"Solar Station {station_id}" if station_id else "Solar Station"
+    if stations and len(stations) == 1 and stations[0].get("station_name"):
+        title = stations[0]["station_name"]
+
+    return {
+        "title": title,
+        "station_id": station_id,
+        "stations": stations,
+    }
 
 
 # ─── Config Flow ───────────────────────────────────────────────────────────────
@@ -103,6 +152,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._auth_mode: str = "password"  # "password" | "token"
+        self._auth_info: dict[str, Any] = {}
+        self._discovered_stations: list[dict[str, Any]] = []
 
     # ── Step 1: choose auth mode ───────────────────────────────────────────────
 
@@ -145,12 +196,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception in password step")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(f"station_{user_input[CONF_STATION_ID]}")
+                station_id = info.get("station_id")
+                # If multiple stations discovered and not specified, ask user to select
+                if not station_id and info.get("stations") and len(info["stations"]) > 1:
+                    self._auth_info = {
+                        CONF_USER_ID: user_input[CONF_USER_ID],
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                        CONF_DEVICE_ID: user_input.get(CONF_DEVICE_ID, ""),
+                        CONF_TIME_ZONE: user_input.get(CONF_TIME_ZONE, "Asia/Manila"),
+                        CONF_IOT_TOKEN: info[CONF_IOT_TOKEN],
+                        CONF_REFRESH_TOKEN: info[CONF_REFRESH_TOKEN],
+                        CONF_ACCESS_TOKEN_EXPIRES: info[CONF_ACCESS_TOKEN_EXPIRES],
+                        CONF_REFRESH_TOKEN_EXPIRES: info[CONF_REFRESH_TOKEN_EXPIRES],
+                    }
+                    self._discovered_stations = info["stations"]
+                    return await self.async_step_select_station()
+
+                await self.async_set_unique_id(f"station_{station_id}")
                 self._abort_if_unique_id_configured()
                 entry_data = {
                     CONF_USER_ID: user_input[CONF_USER_ID],
                     CONF_PASSWORD: user_input[CONF_PASSWORD],
-                    CONF_STATION_ID: user_input[CONF_STATION_ID],
+                    CONF_STATION_ID: station_id,
                     CONF_DEVICE_ID: user_input.get(CONF_DEVICE_ID, ""),
                     CONF_TIME_ZONE: user_input.get(CONF_TIME_ZONE, "Asia/Manila"),
                     CONF_IOT_TOKEN: info[CONF_IOT_TOKEN],
@@ -166,7 +233,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_USER_ID): cv.string,
                     vol.Required(CONF_PASSWORD): cv.string,
-                    vol.Required(CONF_STATION_ID): cv.string,
+                    vol.Optional(CONF_STATION_ID): cv.string,
                     vol.Optional(CONF_DEVICE_ID): cv.string,
                     vol.Optional(CONF_TIME_ZONE, default="Asia/Manila"): cv.string,
                 }
@@ -192,16 +259,31 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception in token step")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(f"station_{user_input[CONF_STATION_ID]}")
+                station_id = info.get("station_id")
+                # If multiple stations discovered and not specified, ask user to select
+                if not station_id and info.get("stations") and len(info["stations"]) > 1:
+                    self._auth_info = {
+                        CONF_IOT_TOKEN: user_input[CONF_IOT_TOKEN],
+                        CONF_DEVICE_ID: user_input.get(CONF_DEVICE_ID, ""),
+                        CONF_TIME_ZONE: user_input.get(CONF_TIME_ZONE, "Asia/Manila"),
+                    }
+                    self._discovered_stations = info["stations"]
+                    return await self.async_step_select_station()
+
+                await self.async_set_unique_id(f"station_{station_id}")
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info["title"], data=user_input)
+                entry_data = {
+                    **user_input,
+                    CONF_STATION_ID: station_id,
+                }
+                return self.async_create_entry(title=info["title"], data=entry_data)
 
         return self.async_show_form(
             step_id="token",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_IOT_TOKEN): cv.string,
-                    vol.Required(CONF_STATION_ID): cv.string,
+                    vol.Optional(CONF_STATION_ID): cv.string,
                     vol.Optional(CONF_DEVICE_ID): cv.string,
                     vol.Optional(CONF_TIME_ZONE, default="Asia/Manila"): cv.string,
                 }
@@ -210,6 +292,46 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "docs_url": "https://github.com/Hyllesen/solar-of-things-solar-usage"
             },
+        )
+
+    # ── Step 2c: select station (when multiple discovered) ────────────────────
+
+    async def async_step_select_station(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step to select station when multiple stations are found."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            station_id = user_input[CONF_STATION_ID]
+            await self.async_set_unique_id(f"station_{station_id}")
+            self._abort_if_unique_id_configured()
+
+            st_info = next(
+                (s for s in self._discovered_stations if s["station_id"] == station_id),
+                None,
+            )
+            title = st_info["station_name"] if st_info else f"Solar Station {station_id}"
+
+            entry_data = {
+                **self._auth_info,
+                CONF_STATION_ID: station_id,
+            }
+            return self.async_create_entry(title=title, data=entry_data)
+
+        station_options = {
+            s["station_id"]: f"{s['station_name']} ({len(s['devices'])} devices) [ID: {s['station_id']}]"
+            for s in self._discovered_stations
+        }
+
+        return self.async_show_form(
+            step_id="select_station",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_STATION_ID): vol.In(station_options),
+                }
+            ),
+            errors=errors,
         )
 
     # ── Re-auth flow ───────────────────────────────────────────────────────────

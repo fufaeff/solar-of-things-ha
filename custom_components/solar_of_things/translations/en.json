@@ -10,10 +10,10 @@
       },
       "password": {
         "title": "Solar of Things — User ID + Password",
-        "description": "Enter your Siseli portal login credentials and Station ID.\n\n- **User ID**: your account/login name on https://solar.siseli.com\n- **Station ID**: 18-digit number found in API request payloads (DevTools → Network)\n- **Device ID**: optional — leave blank to auto-discover all devices under the station\n- **Time zone**: must match your inverter's configured time zone\n\nMore info: {docs_url}",
+        "description": "Enter your Siseli portal login credentials.\n\n- **User ID**: your account/login name on https://solar.siseli.com\n- **Password**: your Siseli portal password\n- **Station ID**: optional — automatically discovered if left blank\n- **Device ID**: optional — leave blank to auto-discover all devices under the station\n- **Time zone**: must match your inverter's configured time zone\n\nMore info: {docs_url}",
         "data": {
           "password": "Password",
-          "station_id": "Station ID (required)",
+          "station_id": "Station ID (optional — auto-discovered if blank)",
           "device_id": "Device ID (optional — blank to auto-discover)",
           "time_zone": "Time zone (e.g. Asia/Manila)",
           "user_id": "User ID / Account"
@@ -24,9 +24,16 @@
         "description": "Enter an IOT-Token from https://solar.siseli.com (DevTools → Network → request headers).\n\nNote: tokens expire. When expired you will be prompted to enter a new one.\n\nMore info: {docs_url}",
         "data": {
           "iot_token": "IOT Token",
-          "station_id": "Station ID (required)",
+          "station_id": "Station ID (optional — auto-discovered if blank)",
           "device_id": "Device ID (optional — blank to auto-discover)",
           "time_zone": "Time zone (e.g. Asia/Manila)"
+        }
+      },
+      "select_station": {
+        "title": "Select Solar Station",
+        "description": "Multiple solar stations were discovered in your account. Select which station you want to add:",
+        "data": {
+          "station_id": "Solar Station"
         }
       },
       "reauth_confirm": {

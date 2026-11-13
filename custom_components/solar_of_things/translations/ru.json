@@ -10,10 +10,10 @@
       },
       "password": {
         "title": "Solar of Things — User ID + Пароль",
-        "description": "Введите учетные данные портала Siseli и Station ID.\n\n- **User ID**: логин/аккаунт на https://solar.siseli.com\n- **Station ID**: 18-значный номер станции из запросов API (DevTools → Network)\n- **Device ID**: опционально — оставьте пустым для автообнаружения всех инверторов станции\n- **Часовой пояс**: должен совпадать с часовым поясом инвертора\n\nПодробнее: {docs_url}",
+        "description": "Введите учетные данные портала Siseli.\n\n- **User ID**: логин/аккаунт на https://solar.siseli.com\n- **Пароль**: ваш пароль от портала Siseli\n- **Station ID**: опционально — определится автоматически, если оставить пустым\n- **Device ID**: опционально — оставьте пустым для автопоиска всех устройств\n- **Часовой пояс**: должен совпадать с часовым поясом инвертора\n\nПодробнее: {docs_url}",
         "data": {
           "password": "Пароль",
-          "station_id": "Station ID (обязательно)",
+          "station_id": "Station ID (опционально — автопоиск)",
           "device_id": "Device ID (опционально — пусто для автопоиска)",
           "time_zone": "Часовой пояс (например Asia/Manila)",
           "user_id": "User ID / Аккаунт"
@@ -24,9 +24,16 @@
         "description": "Введите IOT-Token с https://solar.siseli.com (DevTools → Network → заголовки запросов).\n\nПримечание: срок действия токена ограничен. После истечения потребуется ввести новый.\n\nПодробнее: {docs_url}",
         "data": {
           "iot_token": "IOT Token",
-          "station_id": "Station ID (обязательно)",
+          "station_id": "Station ID (опционально — автопоиск)",
           "device_id": "Device ID (опционально — пусто для автопоиска)",
           "time_zone": "Часовой пояс (например Asia/Manila)"
+        }
+      },
+      "select_station": {
+        "title": "Выберите солнечную станцию",
+        "description": "В вашей учетной записи найдено несколько солнечных станций. Выберите станцию для добавления:",
+        "data": {
+          "station_id": "Солнечная станция"
         }
       },
       "reauth_confirm": {

@@ -111,6 +111,95 @@ async def test_form_password_invalid_auth(hass: HomeAssistant) -> None:
     assert result3["errors"] == {"base": "invalid_auth"}
 
 
+async def test_form_password_auto_discovery_single_station(hass: HomeAssistant) -> None:
+    """Test user_id/password auto-discovers single station without manual station ID."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result2 = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"auth_mode": "password"},
+    )
+    assert result2["type"] == data_entry_flow.FlowResultType.FORM
+    assert result2["step_id"] == "password"
+
+    with patch(
+        "custom_components.solar_of_things.api.SolarOfThingsAPI.login",
+        return_value=None,
+    ), patch(
+        "custom_components.solar_of_things.api.SolarOfThingsAPI.discover_stations",
+        return_value=[
+            {
+                "station_id": "876543210987654321",
+                "station_name": "My Inverter Station",
+                "devices": [{"id": "123456"}],
+            }
+        ],
+    ), patch(
+        "custom_components.solar_of_things.api.SolarOfThingsAPI.test_connection",
+        return_value=True,
+    ):
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {
+                "user_id": "test_user",
+                "password": "correct_password",
+            },
+        )
+
+    assert result3["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result3["title"] == "My Inverter Station"
+    assert result3["data"]["station_id"] == "876543210987654321"
+
+
+async def test_form_password_auto_discovery_multiple_stations(hass: HomeAssistant) -> None:
+    """Test user_id/password prompts selection when multiple stations are found."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result2 = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"auth_mode": "password"},
+    )
+
+    with patch(
+        "custom_components.solar_of_things.api.SolarOfThingsAPI.login",
+        return_value=None,
+    ), patch(
+        "custom_components.solar_of_things.api.SolarOfThingsAPI.discover_stations",
+        return_value=[
+            {
+                "station_id": "111111111111111111",
+                "station_name": "Home Station",
+                "devices": [{"id": "111"}],
+            },
+            {
+                "station_id": "222222222222222222",
+                "station_name": "Cottage Station",
+                "devices": [{"id": "222"}],
+            },
+        ],
+    ):
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {
+                "user_id": "test_user",
+                "password": "correct_password",
+            },
+        )
+
+    assert result3["type"] == data_entry_flow.FlowResultType.FORM
+    assert result3["step_id"] == "select_station"
+
+    result4 = await hass.config_entries.flow.async_configure(
+        result3["flow_id"],
+        {"station_id": "222222222222222222"},
+    )
+    assert result4["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result4["title"] == "Cottage Station"
+    assert result4["data"]["station_id"] == "222222222222222222"
+
+
 async def test_options_flow(hass: HomeAssistant) -> None:
     """Test options flow to change update interval."""
     entry = MockConfigEntry(
