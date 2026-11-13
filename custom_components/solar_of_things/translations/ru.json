@@ -33,8 +33,9 @@
         "title": "Повторная авторизация Solar of Things",
         "description": "Срок действия токена доступа истек. Введите обновленный пароль (или свежий IOT Token) для продолжения.",
         "data": {
+          "user_id": "User ID / Учетная запись",
           "password": "Пароль",
-          "iot_token": "Новый IOT Token"
+          "iot_token": "Новый IOT Token (опционально)"
         }
       }
     },

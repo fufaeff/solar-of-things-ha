@@ -303,7 +303,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.3.5 "
+                    "HomeAssistant-SolarOfThings/2.3.6 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -348,11 +348,29 @@ class SolarOfThingsAPI:
             headers=headers,
             timeout=30,
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as http_err:
+            try:
+                err_data = resp.json()
+                msg = err_data.get("message") or err_data.get("msg")
+                code = err_data.get("code")
+                if msg:
+                    _LOGGER.warning("SolarOfThings login failed: code=%s, msg=%s", code, msg)
+                    raise AuthenticationError(
+                        f"Login failed (HTTP {resp.status_code}, code {code}): {msg}"
+                    ) from http_err
+            except AuthenticationError:
+                raise
+            except Exception:
+                pass
+            raise
+
         data = resp.json()
 
         if data.get("code") not in (0, None, "0"):
             msg = data.get("message") or data.get("msg") or str(data)
+            _LOGGER.warning("SolarOfThings login rejected: code=%s, msg=%s", data.get("code"), msg)
             raise AuthenticationError(f"Login failed: {msg}")
 
         self._store_tokens(data.get("data") or data)
@@ -367,17 +385,54 @@ class SolarOfThingsAPI:
 
         _LOGGER.debug("SolarOfThings: refreshing access token")
 
-        resp = requests.post(
-            f"{API_AUTH_BASE_URL}{API_REFRESH_TOKEN_ENDPOINT}",
-            json={"refreshToken": self._refresh_token},
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json; charset=utf-8",
-                "Origin": "https://solar.siseli.com",
-                "Referer": "https://solar.siseli.com/",
-            },
-            timeout=30,
-        )
+        import json as _json
+
+        payload = {"refreshToken": self._refresh_token}
+        body_bytes = _json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json; charset=utf-8",
+            "Origin": "https://solar.siseli.com",
+            "Referer": "https://solar.siseli.com/",
+        }
+
+        url = f"{API_AUTH_BASE_URL}{API_REFRESH_TOKEN_ENDPOINT}"
+        resp = requests.post(url, data=body_bytes, headers=headers, timeout=30)
+
+        # Fallback to alternative endpoint if 404 (e.g. if path prefix changed)
+        if resp.status_code == 404:
+            alt_endpoint = (
+                "/login/refresh/access/token"
+                if API_REFRESH_TOKEN_ENDPOINT.startswith("/apis")
+                else "/apis/login/refresh/access/token"
+            )
+            _LOGGER.debug(
+                "SolarOfThings: refresh endpoint %s 404, trying %s",
+                API_REFRESH_TOKEN_ENDPOINT,
+                alt_endpoint,
+            )
+            resp = requests.post(
+                f"{API_AUTH_BASE_URL}{alt_endpoint}",
+                data=body_bytes,
+                headers=headers,
+                timeout=30,
+            )
+
+        # Fallback to signed request if unsigned was rejected
+        if resp.status_code in (401, 403) or (
+            resp.status_code == 200
+            and resp.json().get("code") in (10002, 10003, "10002", "10003")
+        ):
+            try:
+                signed_headers = _make_signed_headers(body_bytes)
+                resp = requests.post(
+                    url,
+                    data=body_bytes,
+                    headers=signed_headers,
+                    timeout=30,
+                )
+            except Exception as sign_err:
+                _LOGGER.debug("SolarOfThings: signed refresh attempt failed: %s", sign_err)
 
         if resp.status_code in (401, 403):
             raise TokenExpiredError(
@@ -486,8 +541,9 @@ class SolarOfThingsAPI:
                         "attempting re-login"
                     )
                 except Exception as err:
-                    _LOGGER.error(
-                        "SolarOfThings: token refresh request failed: %s", err
+                    _LOGGER.warning(
+                        "SolarOfThings: token refresh request failed (%s); attempting re-login",
+                        err,
                     )
 
             # Strategy 2: re-login with stored credentials

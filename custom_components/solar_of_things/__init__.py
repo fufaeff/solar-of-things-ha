@@ -76,28 +76,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Build the token-refreshed callback *before* constructing the API so the
     # callback reference is captured.
-    @callback
     def _on_token_refreshed(
         access_token: str,
         refresh_token: str,
         access_expires: str,
         refresh_expires: str,
     ) -> None:
-        """Persist refreshed token back to the config entry (non-blocking)."""
-        hass.config_entries.async_update_entry(
-            entry,
-            data={
-                **entry.data,
-                CONF_IOT_TOKEN: access_token,
-                CONF_REFRESH_TOKEN: refresh_token,
-                CONF_ACCESS_TOKEN_EXPIRES: access_expires,
-                CONF_REFRESH_TOKEN_EXPIRES: refresh_expires,
-            },
-        )
-        _LOGGER.debug(
-            "SolarOfThings [%s]: access token refreshed; entry data updated",
-            entry.entry_id,
-        )
+        """Persist refreshed token back to the config entry (thread-safe)."""
+        new_data = {
+            **entry.data,
+            CONF_IOT_TOKEN: access_token,
+            CONF_REFRESH_TOKEN: refresh_token,
+            CONF_ACCESS_TOKEN_EXPIRES: access_expires,
+            CONF_REFRESH_TOKEN_EXPIRES: refresh_expires,
+        }
+
+        def _update_entry() -> None:
+            hass.config_entries.async_update_entry(entry, data=new_data)
+            _LOGGER.debug(
+                "SolarOfThings [%s]: access token refreshed; entry data updated",
+                entry.entry_id,
+            )
+
+        hass.loop.call_soon_threadsafe(_update_entry)
 
     # Instantiate API in the appropriate auth mode
     if user_id and password:
@@ -266,12 +267,75 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            time_series = await self.hass.async_add_executor_job(
-                self.api.fetch_latest_data, self.device_id
-            )
+            time_series = {}
+            try:
+                time_series = await self.hass.async_add_executor_job(
+                    self.api.fetch_latest_data, self.device_id
+                )
+            except TokenExpiredError:
+                raise
+            except Exception as ts_err:
+                _LOGGER.warning(
+                    "SolarOfThings device %s: timeseries fetch warning (%s), falling back to latest state",
+                    self.device_id,
+                    ts_err,
+                )
+
             latest_state = await self.hass.async_add_executor_job(
                 self.api.fetch_latest_state, self.device_id
             )
+
+            # If timeseries failed or returned empty data, compute power metrics from latest_state
+            if not time_series and latest_state:
+                try:
+                    voltage = float(
+                        (latest_state.get("batteryVoltage") or {}).get("value") or 0
+                    )
+                    discharge = float(
+                        (latest_state.get("batteryDischargeCurrent") or {}).get("value")
+                        or 0
+                    )
+                    charge = float(
+                        (latest_state.get("batteryChargingCurrent") or {}).get("value")
+                        or 0
+                    )
+                    battery_power = (discharge - charge) * voltage
+
+                    pv_power = float(
+                        (latest_state.get("pvInputPower") or {}).get("value") or 0
+                    )
+                    ac_output = float(
+                        (latest_state.get("acOutputActivePower") or {}).get("value")
+                        or 0
+                    )
+                    ac_unit = (
+                        latest_state.get("acOutputActivePower") or {}
+                    ).get("unit", "")
+                    if ac_unit and ac_unit.lower() == "kw":
+                        ac_output *= 1000.0
+
+                    feed_in = float(
+                        (latest_state.get("feedInPower") or {}).get("value") or 0
+                    )
+
+                    time_series = {
+                        "batteryVoltage": voltage,
+                        "batteryDischargeCurrent": discharge,
+                        "batteryChargingCurrent": charge,
+                        "batteryPower": battery_power,
+                        "pvInputPower": pv_power,
+                        "acOutputActivePower": ac_output,
+                        "feedInPower": feed_in,
+                        "gridPower": max(
+                            0.0, ac_output - pv_power + battery_power + feed_in
+                        ),
+                        "loadPower": ac_output,
+                    }
+                except Exception as calc_err:
+                    _LOGGER.debug(
+                        "SolarOfThings: could not derive power values from latest_state: %s",
+                        calc_err,
+                    )
 
             # On first refresh, use batch read to get ALL settings at once.
             # Subsequent updates use the fast cached endpoint to avoid rate limits.

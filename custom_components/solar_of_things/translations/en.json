@@ -33,8 +33,9 @@
         "title": "Re-authenticate Solar of Things",
         "description": "The access token has expired. Enter your updated password (or a fresh IOT Token) to continue.",
         "data": {
+          "user_id": "User ID / Account",
           "password": "Password",
-          "iot_token": "Fresh IOT Token"
+          "iot_token": "Fresh IOT Token (optional)"
         }
       }
     },

@@ -224,33 +224,73 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Ask the user to re-enter credentials or a fresh token."""
         errors: dict[str, str] = {}
         existing_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        has_password = bool(
-            existing_entry
-            and (
-                existing_entry.data.get(CONF_PASSWORD)
-                or existing_entry.data.get(CONF_USER_ID)
-            )
+        existing_user_id = (
+            existing_entry.data.get(CONF_USER_ID, "") if existing_entry else ""
         )
 
         if user_input is not None:
-            if has_password:
-                # Re-authenticate with potentially updated email/password
-                merged = {**(existing_entry.data if existing_entry else {}), **user_input}
+            user_id = (
+                user_input.get(CONF_USER_ID)
+                or (existing_entry.data.get(CONF_USER_ID) if existing_entry else "")
+                or ""
+            ).strip()
+            password = (
+                user_input.get(CONF_PASSWORD)
+                or (existing_entry.data.get(CONF_PASSWORD) if existing_entry else "")
+                or ""
+            ).strip()
+            iot_token = (user_input.get(CONF_IOT_TOKEN) or "").strip()
+
+            if iot_token:
+                # Option A: User provided a fresh IOT Token
+                merged = {
+                    **(existing_entry.data if existing_entry else {}),
+                    CONF_IOT_TOKEN: iot_token,
+                }
+                try:
+                    await _validate_token_auth(self.hass, merged)
+                except CannotConnect as err:
+                    _LOGGER.warning("SolarOfThings re-auth token connection error: %s", err)
+                    errors["base"] = "cannot_connect"
+                except Exception as err:
+                    _LOGGER.warning("SolarOfThings re-auth token validation error: %s", err)
+                    errors["base"] = "invalid_auth"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        existing_entry,
+                        data={
+                            **existing_entry.data,
+                            CONF_IOT_TOKEN: iot_token,
+                        },
+                    )
+                    await self.hass.config_entries.async_reload(existing_entry.entry_id)
+                    return self.async_abort(reason="reauth_successful")
+
+            elif user_id and password:
+                # Option B: Re-authenticate with User ID + Password
+                merged = {
+                    **(existing_entry.data if existing_entry else {}),
+                    CONF_USER_ID: user_id,
+                    CONF_PASSWORD: password,
+                }
                 try:
                     info = await _validate_password_auth(self.hass, merged)
-                except InvalidAuth:
+                except InvalidAuth as err:
+                    _LOGGER.warning("SolarOfThings re-auth invalid auth: %s", err)
                     errors["base"] = "invalid_auth"
-                except CannotConnect:
+                except CannotConnect as err:
+                    _LOGGER.warning("SolarOfThings re-auth cannot connect: %s", err)
                     errors["base"] = "cannot_connect"
-                except Exception:
-                    _LOGGER.exception("Unexpected exception during re-auth")
+                except Exception as err:
+                    _LOGGER.exception("Unexpected exception during re-auth: %s", err)
                     errors["base"] = "unknown"
                 else:
                     self.hass.config_entries.async_update_entry(
                         existing_entry,
                         data={
                             **existing_entry.data,
-                            CONF_PASSWORD: user_input.get(CONF_PASSWORD, existing_entry.data.get(CONF_PASSWORD)),
+                            CONF_USER_ID: user_id,
+                            CONF_PASSWORD: password,
                             CONF_IOT_TOKEN: info[CONF_IOT_TOKEN],
                             CONF_REFRESH_TOKEN: info[CONF_REFRESH_TOKEN],
                             CONF_ACCESS_TOKEN_EXPIRES: info[CONF_ACCESS_TOKEN_EXPIRES],
@@ -260,35 +300,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     await self.hass.config_entries.async_reload(existing_entry.entry_id)
                     return self.async_abort(reason="reauth_successful")
             else:
-                # Legacy token mode: user provides a fresh token
-                merged = {**(existing_entry.data if existing_entry else {}), **user_input}
-                try:
-                    await _validate_token_auth(self.hass, merged)
-                except CannotConnect:
-                    errors["base"] = "cannot_connect"
-                except Exception:
-                    _LOGGER.exception("Unexpected exception during re-auth (token)")
-                    errors["base"] = "unknown"
-                else:
-                    self.hass.config_entries.async_update_entry(
-                        existing_entry,
-                        data={**existing_entry.data, CONF_IOT_TOKEN: user_input[CONF_IOT_TOKEN]},
-                    )
-                    await self.hass.config_entries.async_reload(existing_entry.entry_id)
-                    return self.async_abort(reason="reauth_successful")
+                errors["base"] = "invalid_auth"
 
-        # Build schema based on whether the entry has stored credentials
-        if has_password:
-            schema = vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_PASSWORD,
-                        description={"suggested_value": ""},
-                    ): cv.string,
-                }
-            )
+        schema_dict = {}
+        if existing_user_id:
+            schema_dict[vol.Optional(CONF_USER_ID, default=existing_user_id)] = cv.string
         else:
-            schema = vol.Schema({vol.Required(CONF_IOT_TOKEN): cv.string})
+            schema_dict[vol.Optional(CONF_USER_ID)] = cv.string
+
+        schema_dict[vol.Optional(CONF_PASSWORD)] = cv.string
+        schema_dict[vol.Optional(CONF_IOT_TOKEN)] = cv.string
+
+        schema = vol.Schema(schema_dict)
 
         return self.async_show_form(
             step_id="reauth_confirm",
