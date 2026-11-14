@@ -102,15 +102,22 @@ class _BaseSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def device_info(self):
-        return {
+        info = {
             "identifiers": {(DOMAIN, self._station_id, self._device_id)},
             "name": self._device_name,
             "manufacturer": "Siseli",
             "model": (self.coordinator.data.get("device_meta") or {}).get("model")
             if self.coordinator.data
             else None,
-            "via_device": (DOMAIN, self._station_id),
         }
+        station_device_id = (
+            self.coordinator.hass.data.get(DOMAIN, {})
+            .get(getattr(self.coordinator._entry, "entry_id", ""), {})
+            .get("station_device_id")
+        )
+        if station_device_id:
+            info["via_device_id"] = station_device_id
+        return info
 
 
 class SolarOfThingsGridChargingSwitch(_BaseSwitch):

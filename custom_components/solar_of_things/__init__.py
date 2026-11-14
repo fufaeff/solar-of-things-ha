@@ -167,9 +167,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await c.async_config_entry_first_refresh()
         device_coordinators[device_id] = c
 
+    from homeassistant.helpers import device_registry as dr
+
+    dev_reg = dr.async_get(hass)
+    station_device = dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, station_id)},
+        name=f"Solar Station {station_id}",
+        manufacturer="Siseli",
+        model="Station",
+    )
+
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "station_id": station_id,
+        "station_device_id": station_device.id,
         "station_coordinator": station_coordinator,
         "device_coordinators": device_coordinators,
         "devices": devices,
