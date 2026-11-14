@@ -60,10 +60,18 @@
     "step": {
       "init": {
         "title": "Solar of Things Options",
+        "description": "Configure update interval and Siseli credentials (User ID and password) for perpetual automatic token renewal.",
         "data": {
-          "update_interval": "Update interval (minutes)"
+          "update_interval": "Update interval (minutes)",
+          "user_id": "User ID / Account on solar.siseli.com",
+          "password": "Password (leave blank to keep current)"
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the Solar of Things API. Check network access.",
+      "invalid_auth": "Invalid user ID or password. Please try again.",
+      "unknown": "Unexpected error. Check Home Assistant logs for details."
     }
   },
   "entity": {

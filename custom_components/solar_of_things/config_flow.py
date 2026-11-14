@@ -461,22 +461,78 @@ class SolarOfThingsOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage options."""
+        """Manage options, including updating credentials for automatic token renewal."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            user_id = (user_input.get(CONF_USER_ID) or "").strip()
+            password = (user_input.get(CONF_PASSWORD) or "").strip()
+            update_interval = user_input.get("update_interval", 1)
+
+            effective_user_id = user_id or self.config_entry.data.get(CONF_USER_ID, "")
+            effective_password = password or self.config_entry.data.get(CONF_PASSWORD, "")
+
+            # If user wants to enable/update password-based auto-refresh
+            if effective_user_id and password:
+                merged = {
+                    **self.config_entry.data,
+                    CONF_USER_ID: effective_user_id,
+                    CONF_PASSWORD: password,
+                }
+                try:
+                    info = await _validate_password_auth(self.hass, merged)
+                except InvalidAuth as err:
+                    _LOGGER.warning("SolarOfThings options flow invalid auth: %s", err)
+                    errors["base"] = "invalid_auth"
+                except CannotConnect as err:
+                    _LOGGER.warning("SolarOfThings options flow cannot connect: %s", err)
+                    errors["base"] = "cannot_connect"
+                except Exception as err:
+                    _LOGGER.exception("Unexpected error in options flow: %s", err)
+                    errors["base"] = "unknown"
+                else:
+                    new_data = {
+                        **self.config_entry.data,
+                        CONF_USER_ID: effective_user_id,
+                        CONF_PASSWORD: password,
+                        CONF_IOT_TOKEN: info[CONF_IOT_TOKEN],
+                        CONF_REFRESH_TOKEN: info[CONF_REFRESH_TOKEN],
+                        CONF_ACCESS_TOKEN_EXPIRES: info[CONF_ACCESS_TOKEN_EXPIRES],
+                        CONF_REFRESH_TOKEN_EXPIRES: info[CONF_REFRESH_TOKEN_EXPIRES],
+                    }
+                    self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+                    return self.async_create_entry(
+                        title="",
+                        data={"update_interval": update_interval},
+                    )
+            elif user_id and not effective_password:
+                errors["base"] = "invalid_auth"
+            elif not errors:
+                return self.async_create_entry(
+                    title="",
+                    data={"update_interval": update_interval},
+                )
 
         current_interval = self.config_entry.options.get("update_interval", 1)
+        existing_user_id = self.config_entry.data.get(CONF_USER_ID, "")
+
+        schema_dict: dict[Any, Any] = {
+            vol.Optional(
+                "update_interval",
+                default=current_interval,
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+        }
+        if existing_user_id:
+            schema_dict[vol.Optional(CONF_USER_ID, default=existing_user_id)] = cv.string
+        else:
+            schema_dict[vol.Optional(CONF_USER_ID)] = cv.string
+
+        schema_dict[vol.Optional(CONF_PASSWORD)] = cv.string
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        "update_interval",
-                        default=current_interval,
-                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
         )
 
 
