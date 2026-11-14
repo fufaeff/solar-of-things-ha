@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,6 +13,8 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -19,13 +22,22 @@ from homeassistant.const import (
     UnitOfPower,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SENSOR_DEFINITIONS
 
 _LOGGER = logging.getLogger(__name__)
+
+ACCUMULATED_ENERGY_CONFIG: dict[str, str] = {
+    "batteryChargingEnergy": "batteryChargingPower",
+    "batteryDischargeEnergy": "batteryDischargePower",
+    "acOutputEnergy": "acOutputActivePower",
+    "totalPvEnergy": "totalPvPower",
+}
 
 
 async def async_setup_entry(
@@ -65,16 +77,29 @@ async def async_setup_entry(
                     "icon": "mdi:sensor",
                 }
 
-            entities.append(
-                SolarOfThingsDeviceSensor(
-                    coordinator=coordinator,
-                    station_id=station_id,
-                    device_id=device_id,
-                    device_name=device_name,
-                    sensor_key=key,
-                    sensor_definition=definition,
+            if key in ACCUMULATED_ENERGY_CONFIG:
+                entities.append(
+                    SolarOfThingsAccumulatedEnergySensor(
+                        coordinator=coordinator,
+                        station_id=station_id,
+                        device_id=device_id,
+                        device_name=device_name,
+                        sensor_key=key,
+                        sensor_definition=definition,
+                        source_power_key=ACCUMULATED_ENERGY_CONFIG[key],
+                    )
                 )
-            )
+            else:
+                entities.append(
+                    SolarOfThingsDeviceSensor(
+                        coordinator=coordinator,
+                        station_id=station_id,
+                        device_id=device_id,
+                        device_name=device_name,
+                        sensor_key=key,
+                        sensor_definition=definition,
+                    )
+                )
 
     # Station-level monthly sensors
     if station_coordinator:
@@ -197,11 +222,18 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
         info = latest.get(self._sensor_key)
         if info is not None and info.get("value") is not None:
             try:
-                return round(float(info["value"]), 2)
+                val = float(info["value"])
+                # Normalize kW to W if sensor is configured as Watts
+                unit = str(info.get("unit") or "").strip().lower()
+                if self.native_unit_of_measurement == UnitOfPower.WATT and unit == "kw":
+                    val *= 1000.0
+                elif self.native_unit_of_measurement == UnitOfPower.KILO_WATT and unit == "w":
+                    val /= 1000.0
+                return round(val, 2)
             except (ValueError, TypeError):
                 return info["value"]
 
-        # Fallback to time_series for calculated values (batteryPower, gridPower, loadPower)
+        # Fallback to time_series for calculated values (batteryPower, batteryChargingPower, batteryDischargePower, gridPower, loadPower)
         ts = (self.coordinator.data or {}).get("time_series") or {}
         val = ts.get(self._sensor_key)
         if val is not None:
@@ -210,7 +242,177 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             except (ValueError, TypeError):
                 return val
 
+        # Dynamic fallback calculation from latest_state if not present in time_series
+        if latest:
+            try:
+                v_info = latest.get("batteryVoltage")
+                if v_info and v_info.get("value") is not None:
+                    v = float(v_info["value"])
+                    if self._sensor_key == "batteryChargingPower":
+                        c_info = latest.get("batteryChargingCurrent")
+                        if c_info and c_info.get("value") is not None:
+                            return round(v * float(c_info["value"]), 2)
+                    elif self._sensor_key == "batteryDischargePower":
+                        d_info = latest.get("batteryDischargeCurrent")
+                        if d_info and d_info.get("value") is not None:
+                            return round(v * float(d_info["value"]), 2)
+                    elif self._sensor_key == "batteryPower":
+                        c_val = float((latest.get("batteryChargingCurrent") or {}).get("value") or 0)
+                        d_val = float((latest.get("batteryDischargeCurrent") or {}).get("value") or 0)
+                        return round((d_val - c_val) * v, 2)
+                    elif self._sensor_key == "totalPvPower":
+                        p1 = float((latest.get("pvInputPower") or {}).get("value") or 0)
+                        p2 = float((latest.get("pv2InputPower") or {}).get("value") or 0)
+                        return round(p1 + p2, 2)
+            except (ValueError, TypeError):
+                pass
+
+        if self._sensor_key == "totalPvPower" and latest:
+            try:
+                p1 = float((latest.get("pvInputPower") or {}).get("value") or 0)
+                p2 = float((latest.get("pv2InputPower") or {}).get("value") or 0)
+                return round(p1 + p2, 2)
+            except (ValueError, TypeError):
+                pass
+
         return None
+
+
+class SolarOfThingsAccumulatedEnergySensor(SolarOfThingsDeviceSensor, RestoreEntity):
+    """Energy sensor that accumulates kWh from power (W) over time with state persistence."""
+
+    def __init__(
+        self,
+        coordinator,
+        station_id: str,
+        device_id: str,
+        device_name: str,
+        sensor_key: str,
+        sensor_definition: dict,
+        source_power_key: str,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            station_id,
+            device_id,
+            device_name,
+            sensor_key,
+            sensor_definition,
+        )
+        self._source_power_key = source_power_key
+        self._accumulated_kwh: float = 0.0
+        self._last_power: float | None = None
+        self._last_update_time: datetime | None = None
+
+        self._attr_device_class = SensorDeviceClass.ENERGY
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last accumulated energy state on Home Assistant startup."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if (
+            last_state
+            and last_state.state is not None
+            and last_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        ):
+            try:
+                self._accumulated_kwh = float(last_state.state)
+                _LOGGER.debug(
+                    "SolarOfThings: restored accumulated energy for %s: %s kWh",
+                    self.entity_id,
+                    self._accumulated_kwh,
+                )
+            except (ValueError, TypeError):
+                pass
+
+    def _get_current_power(self) -> float | None:
+        """Extract current source power in Watts from coordinator data."""
+        latest = (self.coordinator.data or {}).get("latest_state") or {}
+
+        if self._source_power_key == "totalPvPower":
+            pv1 = 0.0
+            pv2 = 0.0
+            pv1_info = latest.get("pvInputPower")
+            if pv1_info and pv1_info.get("value") is not None:
+                try:
+                    pv1 = float(pv1_info["value"])
+                except (ValueError, TypeError):
+                    pass
+            pv2_info = latest.get("pv2InputPower")
+            if pv2_info and pv2_info.get("value") is not None:
+                try:
+                    pv2 = float(pv2_info["value"])
+                except (ValueError, TypeError):
+                    pass
+            return pv1 + pv2
+
+        if self._source_power_key in ("batteryChargingPower", "batteryDischargePower"):
+            v_info = latest.get("batteryVoltage")
+            if v_info and v_info.get("value") is not None:
+                try:
+                    v = float(v_info["value"])
+                    if self._source_power_key == "batteryChargingPower":
+                        c_info = latest.get("batteryChargingCurrent")
+                        if c_info and c_info.get("value") is not None:
+                            return v * float(c_info["value"])
+                    elif self._source_power_key == "batteryDischargePower":
+                        d_info = latest.get("batteryDischargeCurrent")
+                        if d_info and d_info.get("value") is not None:
+                            return v * float(d_info["value"])
+                except (ValueError, TypeError):
+                    pass
+
+        info = latest.get(self._source_power_key)
+        if info is not None and info.get("value") is not None:
+            try:
+                val = float(info["value"])
+                unit = str(info.get("unit") or "").strip().lower()
+                if unit == "kw":
+                    val *= 1000.0
+                return val
+            except (ValueError, TypeError):
+                pass
+
+        ts = (self.coordinator.data or {}).get("time_series") or {}
+        val = ts.get(self._source_power_key)
+        if val is not None:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                pass
+
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from coordinator and integrate power into energy."""
+        current_power = self._get_current_power()
+        now = dt_util.utcnow()
+
+        if current_power is not None and current_power >= 0:
+            if self._last_update_time is not None:
+                dt_seconds = (now - self._last_update_time).total_seconds()
+                # Integrate if update interval is positive and within 2 hours
+                if 0 < dt_seconds <= 7200:
+                    prev_p = (
+                        self._last_power
+                        if self._last_power is not None
+                        else current_power
+                    )
+                    avg_p = (prev_p + current_power) / 2.0
+                    delta_kwh = (avg_p * dt_seconds) / (3600.0 * 1000.0)
+                    self._accumulated_kwh += delta_kwh
+
+            self._last_power = current_power
+            self._last_update_time = now
+
+        super()._handle_coordinator_update()
+
+    @property
+    def native_value(self) -> float:
+        return round(self._accumulated_kwh, 3)
 
 
 class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):

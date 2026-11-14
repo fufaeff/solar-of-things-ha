@@ -321,10 +321,17 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                         or 0
                     )
                     battery_power = (discharge - charge) * voltage
+                    battery_charging_power = round(charge * voltage, 2)
+                    battery_discharge_power = round(discharge * voltage, 2)
 
                     pv_power = float(
                         (latest_state.get("pvInputPower") or {}).get("value") or 0
                     )
+                    pv2_power = float(
+                        (latest_state.get("pv2InputPower") or {}).get("value") or 0
+                    )
+                    total_pv_power = round(pv_power + pv2_power, 2)
+
                     ac_output = float(
                         (latest_state.get("acOutputActivePower") or {}).get("value")
                         or 0
@@ -344,11 +351,15 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                         "batteryDischargeCurrent": discharge,
                         "batteryChargingCurrent": charge,
                         "batteryPower": battery_power,
+                        "batteryChargingPower": battery_charging_power,
+                        "batteryDischargePower": battery_discharge_power,
                         "pvInputPower": pv_power,
+                        "pv2InputPower": pv2_power,
+                        "totalPvPower": total_pv_power,
                         "acOutputActivePower": ac_output,
                         "feedInPower": feed_in,
                         "gridPower": max(
-                            0.0, ac_output - pv_power + battery_power + feed_in
+                            0.0, ac_output - total_pv_power + battery_power + feed_in
                         ),
                         "loadPower": ac_output,
                     }
