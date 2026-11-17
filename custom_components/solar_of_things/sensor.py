@@ -23,6 +23,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -209,6 +210,12 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             self._attr_native_unit_of_measurement = unit_raw
 
     @property
+    def device_info(self) -> DeviceInfo:
+        return inverter_device_info(
+            self.coordinator.data, self._station_id, self._device_id, self._device_name
+        )
+
+    @property
     def native_value(self):
         latest = (self.coordinator.data or {}).get("latest_state") or {}
         info = latest.get(self._sensor_key)
@@ -320,82 +327,86 @@ class SolarOfThingsAccumulatedEnergySensor(SolarOfThingsDeviceSensor, RestoreEnt
                 pass
 
     def _get_current_power(self) -> float | None:
-        """Extract current source power in Watts from coordinator data."""
-        latest = (self.coordinator.data or {}).get("latest_state") or {}
+        """Return the current source power in Watts, or None if not fresh.
 
-        if self._source_power_key == "totalPvPower":
-            pv1 = 0.0
-            pv2 = 0.0
-            pv1_info = latest.get("pvInputPower")
-            if pv1_info and pv1_info.get("value") is not None:
+        Only values fetched in the latest coordinator update are used; data
+        carried over from a previous update must not be integrated again.
+        """
+        data = self.coordinator.data or {}
+
+        if data.get("latest_state_fresh"):
+            power = self._power_from_latest_state(data.get("latest_state") or {})
+            if power is not None:
+                return power
+
+        if data.get("time_series_fresh"):
+            val = (data.get("time_series") or {}).get(self._source_power_key)
+            if val is not None:
                 try:
-                    pv1 = float(pv1_info["value"])
+                    return float(val)
                 except (ValueError, TypeError):
                     pass
-            pv2_info = latest.get("pv2InputPower")
-            if pv2_info and pv2_info.get("value") is not None:
-                try:
-                    pv2 = float(pv2_info["value"])
-                except (ValueError, TypeError):
-                    pass
-            return pv1 + pv2
-
-        if self._source_power_key in ("batteryChargingPower", "batteryDischargePower"):
-            v_info = latest.get("batteryVoltage")
-            if v_info and v_info.get("value") is not None:
-                try:
-                    v = float(v_info["value"])
-                    if self._source_power_key == "batteryChargingPower":
-                        c_info = latest.get("batteryChargingCurrent")
-                        if c_info and c_info.get("value") is not None:
-                            return v * float(c_info["value"])
-                    elif self._source_power_key == "batteryDischargePower":
-                        d_info = latest.get("batteryDischargeCurrent")
-                        if d_info and d_info.get("value") is not None:
-                            return v * float(d_info["value"])
-                except (ValueError, TypeError):
-                    pass
-
-        info = latest.get(self._source_power_key)
-        if info is not None and info.get("value") is not None:
-            try:
-                val = float(info["value"])
-                unit = str(info.get("unit") or "").strip().lower()
-                if unit == "kw":
-                    val *= 1000.0
-                return val
-            except (ValueError, TypeError):
-                pass
-
-        ts = (self.coordinator.data or {}).get("time_series") or {}
-        val = ts.get(self._source_power_key)
-        if val is not None:
-            try:
-                return float(val)
-            except (ValueError, TypeError):
-                pass
 
         return None
+
+    def _power_from_latest_state(self, latest: dict) -> float | None:
+        """Extract the source power in Watts from latest_state fields."""
+
+        def _value(key: str) -> float | None:
+            info = latest.get(key)
+            if not info or info.get("value") is None:
+                return None
+            try:
+                return float(info["value"])
+            except (ValueError, TypeError):
+                return None
+
+        if self._source_power_key == "totalPvPower":
+            pv1 = _value("pvInputPower")
+            pv2 = _value("pv2InputPower")
+            if pv1 is None and pv2 is None:
+                return None
+            return (pv1 or 0.0) + (pv2 or 0.0)
+
+        if self._source_power_key in ("batteryChargingPower", "batteryDischargePower"):
+            voltage = _value("batteryVoltage")
+            current = _value(
+                "batteryChargingCurrent"
+                if self._source_power_key == "batteryChargingPower"
+                else "batteryDischargeCurrent"
+            )
+            if voltage is None or current is None:
+                return None
+            return voltage * current
+
+        val = _value(self._source_power_key)
+        if val is None:
+            return None
+        unit = str((latest.get(self._source_power_key) or {}).get("unit") or "")
+        if unit.strip().lower() == "kw":
+            val *= 1000.0
+        return val
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from coordinator and integrate power into energy."""
-        current_power = self._get_current_power()
+        current_power = (
+            self._get_current_power() if self.coordinator.last_update_success else None
+        )
         now = dt_util.utcnow()
 
-        if current_power is not None and current_power >= 0:
-            if self._last_update_time is not None:
+        if current_power is None or current_power < 0:
+            # No fresh sample: forget the last one so the gap is not integrated
+            # with outdated power once fresh data arrives again.
+            self._last_power = None
+            self._last_update_time = None
+        else:
+            if self._last_update_time is not None and self._last_power is not None:
                 dt_seconds = (now - self._last_update_time).total_seconds()
                 # Integrate if update interval is positive and within 2 hours
                 if 0 < dt_seconds <= 7200:
-                    prev_p = (
-                        self._last_power
-                        if self._last_power is not None
-                        else current_power
-                    )
-                    avg_p = (prev_p + current_power) / 2.0
-                    delta_kwh = (avg_p * dt_seconds) / (3600.0 * 1000.0)
-                    self._accumulated_kwh += delta_kwh
+                    avg_p = (self._last_power + current_power) / 2.0
+                    self._accumulated_kwh += (avg_p * dt_seconds) / (3600.0 * 1000.0)
 
             self._last_power = current_power
             self._last_update_time = now
@@ -432,10 +443,16 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
         if unit == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-            self._attr_state_class = SensorStateClass.TOTAL
+            # Monthly counters drop to 0 at the start of each month; with
+            # TOTAL_INCREASING the recorder treats that drop as a meter reset.
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         elif unit == "%":
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return station_device_info(self._station_id)
 
     @property
     def native_value(self):

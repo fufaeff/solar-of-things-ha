@@ -1,47 +1,30 @@
-## [2.4.4] - 2026-11-18
+## [2.5.1] - 2026-11-17
 
 ### Fixed
-- **Entities missing on Home Assistant before 2026.8**: `via_device_id` is only accepted in
-  `DeviceInfo` since HA 2026.8; older versions rejected the device info and dropped every
-  inverter entity. The integration now detects support and falls back to `via_device` there.
-- **Setting writes and expired tokens**: writes now refresh the access token and retry once on
-  HTTP 401, and start the re-authentication flow when the token cannot be refreshed.
-- **Clear errors on failed writes**: switch, number and select actions raise a
-  `HomeAssistantError` with a readable message instead of a raw `RuntimeError`/`HTTPError`.
-- **Controls flipping back after a change**: a written value is shown right away and kept until
-  the cloud settings cache reports it (up to 5 minutes), instead of reverting on the next poll.
+- **Monthly sensors always 0**: the yearly station summary is now parsed in its real shape (`data.properties[].property.key` + `timePoints[]` with `time == "YYYY-MM"`). Monthly PV Generated, Total Consumption and Grid Import now come from `pvGeneratedEnergy`, `consumeElectricityQuantity` and `buyElectricityQuantity`. Values missing from the response are reported as unknown instead of 0.
+- **Monthly Solar Coverage** is now the share of consumption not bought from the grid: `(consumption − grid import) / consumption`, limited to 0–100 %.
+- Monthly energy sensors use `state_class: total_increasing`, so the reset at the start of a month is not recorded as negative energy.
 
-- **Backup Mode switch overwrote the output priority**: turning it off always wrote SUB, even
-  when the inverter had been in USB, and even when SBU was not active. It now restores the
-  priority that was active before SBU (kept across restarts, SUB if unknown) and does
-  nothing when SBU is not active.
+### Added
+- Monthly Grid Export, Monthly Battery Charge and Monthly Battery Discharge sensors (`sellElectricityQuantity`, `chargeElectricityQuantity`, `dischargeElectricityQuantity`).
 
-### Breaking
-- **`Grid Charging (AC Input Range)` switch replaced by the `AC Input Range` select**
-  (`Appliance (APL)` / `UPS`). The setting (`acInputRangeSetting`) is the AC input voltage
-  window, not grid charging; grid charging is controlled by `Charger Source Priority`.
-  The old `switch.*_grid_charging` entity is removed automatically; update automations and
-  dashboards that used it.
+## [2.5.0] - 2026-11-17
+
+### Fixed
+- **Expired tokens now trigger re-auth**: HTTP 401 and token-invalid business codes (10002/10003) from any data endpoint force a token refresh and one retry; if the token cannot be refreshed (e.g. legacy IOT-token mode) `TokenExpiredError` is raised and the re-auth flow starts instead of the data silently freezing.
+- **Bounded stale data**: coordinators keep previous data for at most 5 consecutive failed device updates (2 for the station); after that entities become unavailable.
+- **Energy integrators no longer over-count during outages**: accumulated energy sensors only integrate freshly fetched power values.
+- **No reload on token refresh**: the update listener reloads the entry only when options or credentials change, not when refreshed tokens are persisted.
+- **Device registry**: inverter identifiers are now valid `(domain, id)` pairs (existing devices are migrated in place); the station device is registered before inverters reference it via `via_device`.
 
 ### Changed
-- **Translated control names**: switches, numbers and selects use `has_entity_name` with
-  translation keys; names are now localized (English and Russian). Entity IDs are unchanged.
-  Requires Home Assistant 2023.4 or newer (minimum raised from 2023.1).
-- **Entity categories**: device-configuration controls (display, buzzer, protection toggles,
-  battery profile voltages and equalization, battery type, output frequency/voltage, grid
-  connection type, AC input range) are marked as configuration entities and no longer appear
-  on auto-generated dashboards.
-- The nine 0/1 toggle switches are built from one table (`TOGGLE_SWITCHES`) instead of nine
-  copy-pasted classes; Backup Mode got its own icon (it shared BMS Enabled's).
-- Removed dead code: 36 unused `set_*` helpers and `update_device_settings` in `api.py`, the
-  unused and outdated `NUMBER_SETTING_DEFINITIONS` / `TOGGLE_SETTING_DEFINITIONS` in `const.py`,
-  and stale entity translation keys that matched no entity.
-- CI syntax check now includes `entity.py`.
-- New shared `entity.py`: one place builds `DeviceInfo` and performs setting writes for all
-  platforms; entities no longer read the coordinator's private `_entry`.
-- `api.py`: `_write_setting` is now public `write_setting`; the cloud rejecting a value raises
-  `SettingsWriteError`.
-- Bumped manifest version and `api.py` User-Agent to 2.4.4.
+- Requires Home Assistant 2024.12 or newer (`ConfigFlowResult`, options flow without explicit `config_entry`, `async_update_reload_and_abort`).
+- Time-series polling requests a 15-minute window (max 100 points) instead of 1 hour / 2000 points.
+- Documentation links in the config flow point to this repository.
+
+### Development
+- CI runs hassfest, HACS validation, ruff and the test suite; test failures now fail the build.
+- New tests for the API client (signing, login, token refresh, parsing) and for setup/coordinators/energy integration.
 
 ## [2.3.5] - 2026-06-16
 

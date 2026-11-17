@@ -51,6 +51,22 @@ API_DEVICE_LIST = "/apis/device/list"
 # Mirrors the portal JS which refreshes when ≤300 s remain.
 TOKEN_REFRESH_LEAD_SECONDS = 300  # 5 minutes
 
+# Business-level response codes (HTTP 200 + {"code": ...}) meaning the token is
+# missing, invalid or expired.  Treated the same way as HTTP 401.
+TOKEN_INVALID_CODES = frozenset({10002, 10003})
+
+# ─── Time-series polling ───────────────────────────────────────────────────────
+# Window and page size of the per-minute time-series request.  Devices report
+# every few minutes; only the newest point per key is used.
+TIME_SERIES_WINDOW_MINUTES = 15
+TIME_SERIES_MAX_POINTS = 100
+
+# ─── Stale-data policy ─────────────────────────────────────────────────────────
+# How many consecutive failed updates a coordinator may paper over by returning
+# the previous data.  After that the entities become unavailable.
+MAX_DEVICE_STALE_UPDATES = 5  # ≈5 min at the default 1-minute interval
+MAX_STATION_STALE_UPDATES = 2  # ≈1 h at the 30-minute interval
+
 # ─── Sensor keys ───────────────────────────────────────────────────────────────
 SENSOR_KEYS = [
     "pvInputPower",
@@ -218,6 +234,35 @@ SENSOR_DEFINITIONS = {
         "unit": "%",
         "icon": "mdi:percent",
     },
+    "monthly_grid_export": {
+        "name": "Monthly Grid Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-export",
+    },
+    "monthly_battery_charge": {
+        "name": "Monthly Battery Charge",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:battery-arrow-up",
+    },
+    "monthly_battery_discharge": {
+        "name": "Monthly Battery Discharge",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:battery-arrow-down",
+    },
+}
+
+# Monthly sensor key → property key in the yearly station summary response
+# (/stationOverView/stateAttributeSummary/category/yearly).
+MONTHLY_SUMMARY_KEYS = {
+    "monthly_pv_generated": "pvGeneratedEnergy",
+    "monthly_total_consumption": "consumeElectricityQuantity",
+    "monthly_grid_import": "buyElectricityQuantity",
+    "monthly_grid_export": "sellElectricityQuantity",
+    "monthly_battery_charge": "chargeElectricityQuantity",
+    "monthly_battery_discharge": "dischargeElectricityQuantity",
 }
 
 # Operating-mode select maps HA option strings to integer values

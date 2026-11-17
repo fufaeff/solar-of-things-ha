@@ -1,13 +1,12 @@
 """Test the Solar of Things config flow."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.solar_of_things.const import DOMAIN
 from custom_components.solar_of_things.api import AuthenticationError
+from custom_components.solar_of_things.const import DOMAIN
 
 
 async def test_form_user_step(hass: HomeAssistant) -> None:
