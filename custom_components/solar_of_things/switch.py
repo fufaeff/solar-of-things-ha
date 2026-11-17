@@ -8,9 +8,9 @@ from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, TOGGLE_SETTING_DEFINITIONS
+from .const import DOMAIN
+from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,34 +90,8 @@ def _setting_value(coordinator_data: dict | None, key: str) -> int | None:
         return None
 
 
-class _BaseSwitch(CoordinatorEntity, SwitchEntity):
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(coordinator)
-        self._api = api
-        self._station_id = station_id
-        self._device_id = device_id
-        self._device_name = device_name
-
-    @property
-    def device_info(self):
-        info = {
-            "identifiers": {(DOMAIN, self._station_id, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": "Siseli",
-            "model": (self.coordinator.data.get("device_meta") or {}).get("model")
-            if self.coordinator.data
-            else None,
-        }
-        station_device_id = (
-            self.coordinator.hass.data.get(DOMAIN, {})
-            .get(getattr(self.coordinator._entry, "entry_id", ""), {})
-            .get("station_device_id")
-        )
-        if station_device_id:
-            info["via_device_id"] = station_device_id
-        return info
+class _BaseSwitch(SolarOfThingsDeviceEntity, SwitchEntity):
+    """Base class for Solar of Things switches."""
 
 
 class SolarOfThingsGridChargingSwitch(_BaseSwitch):
@@ -144,17 +118,11 @@ class SolarOfThingsGridChargingSwitch(_BaseSwitch):
             return None
         return val == 0  # 0=Appliance (charging OK), 1=UPS (bypass)
 
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_charging, self._device_id, True
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_write_setting("acInputRangeSetting", 0)
 
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_charging, self._device_id, False
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_write_setting("acInputRangeSetting", 1)
 
 
 class SolarOfThingsGridFeedInSwitch(_BaseSwitch):
@@ -180,17 +148,11 @@ class SolarOfThingsGridFeedInSwitch(_BaseSwitch):
             return None
         return val == 1  # 1=ON
 
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_feed_in, self._device_id, True
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_write_setting("batteryPowerLimitingSetting", 1)
 
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_feed_in, self._device_id, False
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_write_setting("batteryPowerLimitingSetting", 0)
 
 
 class SolarOfThingsBackupModeSwitch(_BaseSwitch):
@@ -219,17 +181,11 @@ class SolarOfThingsBackupModeSwitch(_BaseSwitch):
             return None
         return val == 2  # SBU
 
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_backup_mode, self._device_id, True
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_write_setting("outputSourcePrioritySetting", 2)
 
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_backup_mode, self._device_id, False
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_write_setting("outputSourcePrioritySetting", 1)
 
 
 # ─── Toggle switches (0=Off, 1=On pattern) ──────────────────────────────────────
@@ -262,17 +218,11 @@ class _BaseToggleSwitch(_BaseSwitch):
             return None
         return val == 1
 
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_toggle_setting, self._device_id, self._setting_key, True
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_on(self, **kwargs) -> None:
+        await self._async_write_setting(self._setting_key, 1)
 
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_toggle_setting, self._device_id, self._setting_key, False
-        )
-        await self.coordinator.async_request_refresh()
+    async def async_turn_off(self, **kwargs) -> None:
+        await self._async_write_setting(self._setting_key, 0)
 
 
 class SolarOfThingsBmsFunctionEnableSwitch(_BaseToggleSwitch):

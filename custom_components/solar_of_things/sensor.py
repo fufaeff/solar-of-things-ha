@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SENSOR_DEFINITIONS
+from .entity import inverter_device_info, station_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -141,6 +142,9 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_name = f"{device_name} {sensor_definition['name']}"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_{sensor_key}"
+        self._attr_device_info = inverter_device_info(
+            coordinator, station_id, device_id, device_name
+        )
         self._attr_icon = sensor_definition.get("icon")
 
         unit_raw = str(sensor_definition.get("unit") or "").strip()
@@ -203,25 +207,6 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit_raw:
             self._attr_native_unit_of_measurement = unit_raw
-
-    @property
-    def device_info(self):
-        info = {
-            "identifiers": {(DOMAIN, self._station_id, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": "Siseli",
-            "model": (self.coordinator.data.get("device_meta") or {}).get("model")
-            if self.coordinator.data
-            else None,
-        }
-        station_device_id = (
-            self.coordinator.hass.data.get(DOMAIN, {})
-            .get(getattr(self.coordinator._entry, "entry_id", ""), {})
-            .get("station_device_id")
-        )
-        if station_device_id:
-            info["via_device_id"] = station_device_id
-        return info
 
     @property
     def native_value(self):
@@ -440,6 +425,7 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
 
         self._attr_name = f"Station {station_id} {sensor_definition['name']}"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{sensor_key}"
+        self._attr_device_info = station_device_info(station_id)
         self._attr_icon = sensor_definition.get("icon")
 
         unit = sensor_definition.get("unit")
@@ -450,15 +436,6 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
         elif unit == "%":
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._station_id)},
-            "name": f"Solar Station {self._station_id}",
-            "manufacturer": "Siseli",
-            "model": "Station",
-        }
 
     @property
     def native_value(self):

@@ -32,7 +32,9 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import SolarOfThingsAPI, TokenExpiredError
 from .const import (
@@ -47,6 +49,7 @@ from .const import (
     CONF_USER_ID,
     DOMAIN,
 )
+from .entity import station_device_fields
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,6 +62,23 @@ PLATFORMS: list[Platform] = [
 
 DEVICE_UPDATE_INTERVAL = timedelta(minutes=1)
 STATION_UPDATE_INTERVAL = timedelta(minutes=30)
+
+# How long a value we just wrote is shown instead of the (cached, possibly stale)
+# value reported by the cloud settings endpoint.
+PENDING_SETTING_TTL = timedelta(minutes=5)
+
+
+def _setting_raw(entry: Any) -> Any:
+    """Return the raw value of a settings entry ({"value": x, ...} or bare x)."""
+    return entry.get("value") if isinstance(entry, dict) else entry
+
+
+def _setting_values_equal(left: Any, right: Any) -> bool:
+    """Compare setting values that may arrive as int, float or numeric string."""
+    try:
+        return abs(float(left) - float(right)) < 1e-6
+    except (TypeError, ValueError):
+        return str(left) == str(right)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -128,6 +148,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     station_id = entry.data[CONF_STATION_ID]
     configured_device_id = (entry.data.get(CONF_DEVICE_ID) or "").strip()
 
+    # Register the station (parent) device first so per-device entities can
+    # link to it through via_device_id.
+    station_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **station_device_fields(station_id),
+    )
+
     # ── Station coordinator (device list + monthly) ────────────────────────────
     station_coordinator = SolarOfThingsStationCoordinator(
         hass=hass,
@@ -163,20 +190,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device=device_id,
             device_meta=dev,
             entry=entry,
+            station_device_id=station_device.id,
         )
         await c.async_config_entry_first_refresh()
         device_coordinators[device_id] = c
-
-    from homeassistant.helpers import device_registry as dr
-
-    dev_reg = dr.async_get(hass)
-    station_device = dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, station_id)},
-        name=f"Solar Station {station_id}",
-        manufacturer="Siseli",
-        model="Station",
-    )
 
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
@@ -269,13 +286,17 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         device: str,
         device_meta: dict[str, Any],
         entry: ConfigEntry,
+        station_device_id: str | None = None,
     ) -> None:
         self.api = api
         self.station_id = station_id
         self.device_id = device
         self.device_meta = device_meta
+        self.station_device_id = station_device_id
         self._entry = entry
         self._is_first_refresh = True
+        # setting key -> (written value, expiry) for optimistic state
+        self._pending_settings: dict[str, tuple[Any, Any]] = {}
         interval_min = entry.options.get("update_interval", 1)
         super().__init__(
             hass,
@@ -283,6 +304,57 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             name=f"{DOMAIN}_device_{device}",
             update_interval=timedelta(minutes=interval_min),
         )
+
+    @callback
+    def start_reauth(self) -> None:
+        """Ask the user to re-authenticate the config entry."""
+        self._entry.async_start_reauth(self.hass)
+
+    @callback
+    def async_set_pending_setting(self, key: str, value: Any) -> None:
+        """Show a just-written setting value until the cloud reports it.
+
+        The settings endpoint is a cache that lags behind the inverter, so
+        without this the entity would flip back to the old value on the next
+        refresh. The pending value wins until the cloud returns the same value
+        or PENDING_SETTING_TTL expires.
+        """
+        self._pending_settings[key] = (value, dt_util.utcnow() + PENDING_SETTING_TTL)
+        if self.data is not None:
+            self.async_set_updated_data(
+                {
+                    **self.data,
+                    "settings": self._apply_pending_settings(
+                        self.data.get("settings") or {}, confirmed=False
+                    ),
+                }
+            )
+
+    def _apply_pending_settings(
+        self, settings: dict[str, Any], *, confirmed: bool
+    ) -> dict[str, Any]:
+        """Overlay pending writes on settings.
+
+        confirmed=True means settings came fresh from the cloud, so a pending
+        value that now matches is considered applied and dropped.
+        """
+        if not self._pending_settings:
+            return settings
+        now = dt_util.utcnow()
+        result = dict(settings)
+        for key, (value, expires) in list(self._pending_settings.items()):
+            if expires <= now or (
+                confirmed and _setting_values_equal(_setting_raw(settings.get(key)), value)
+            ):
+                del self._pending_settings[key]
+                continue
+            current = result.get(key)
+            result[key] = (
+                {**current, "value": value}
+                if isinstance(current, dict)
+                else {"value": value}
+            )
+        return result
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -386,10 +458,14 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
 
             # Retrieve settings from fast cached cloud endpoint
             settings = {}
+            settings_fresh = False
             try:
                 settings = await self.hass.async_add_executor_job(
                     self.api.fetch_settings, self.device_id
                 )
+                settings_fresh = bool(settings)
+            except TokenExpiredError:
+                raise
             except Exception as set_err:
                 _LOGGER.debug(
                     "SolarOfThings device %s: settings fetch error (%s)",
@@ -409,6 +485,7 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                     settings = await self.hass.async_add_executor_job(
                         self.api.fetch_settings_batch, self.device_id
                     )
+                    settings_fresh = bool(settings)
                 except Exception as batch_err:
                     _LOGGER.debug(
                         "SolarOfThings device %s: batch read fallback failed: %s",
@@ -421,7 +498,9 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
             return {
                 "time_series": time_series,
                 "latest_state": latest_state,
-                "settings": settings,
+                "settings": self._apply_pending_settings(
+                    settings, confirmed=settings_fresh
+                ),
                 "device": self.device_id,
                 "station_id": self.station_id,
                 "device_meta": self.device_meta,

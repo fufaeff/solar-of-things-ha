@@ -130,6 +130,10 @@ class AuthenticationError(Exception):
     """Raised when login credentials are rejected by the server."""
 
 
+class SettingsWriteError(RuntimeError):
+    """Raised when the cloud accepts the request but rejects the setting value."""
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Signing helpers  (reverse-engineered from portal umi.js)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -303,7 +307,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.4.1 "
+                    "HomeAssistant-SolarOfThings/2.4.4 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -512,20 +516,23 @@ class SolarOfThingsAPI:
         lead = timedelta(seconds=TOKEN_REFRESH_LEAD_SECONDS)
         return datetime.now(timezone.utc) >= (self._access_expires - lead)
 
-    def _ensure_token_valid(self) -> None:
+    def _ensure_token_valid(self, *, force: bool = False) -> None:
         """Proactively refresh the access token if needed.
 
         Thread-safe: uses a lock so parallel coordinator updates don't
         trigger multiple simultaneous refresh calls.
 
+        force=True skips the expiry check; used after the server answered 401
+        even though the token looked valid locally.
+
         Raises TokenExpiredError when all refresh strategies are exhausted.
         """
-        if not self._token_needs_refresh():
+        if not force and not self._token_needs_refresh():
             return
 
         with self._refresh_lock:
             # Double-check inside the lock (another thread may have refreshed)
-            if not self._token_needs_refresh():
+            if not force and not self._token_needs_refresh():
                 return
 
             _LOGGER.info("SolarOfThings: access token expiring; attempting refresh")
@@ -568,6 +575,27 @@ class SolarOfThingsAPI:
 
     # ─── Internal HTTP helper ──────────────────────────────────────────────────
 
+    def _send(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        """Send an authenticated request, refreshing the token once on HTTP 401.
+
+        Raises TokenExpiredError when the token cannot be refreshed or the server
+        still answers 401 after a refresh; other HTTP errors raise HTTPError.
+        """
+        self._ensure_token_valid()
+        resp = self.session.request(method, url, **kwargs)
+
+        if resp.status_code == 401:
+            _LOGGER.warning("SolarOfThings: received 401; forcing token refresh")
+            self._ensure_token_valid(force=True)
+            resp = self.session.request(method, url, **kwargs)
+            if resp.status_code == 401:
+                raise TokenExpiredError(
+                    "Server rejected the access token even after a refresh"
+                )
+
+        resp.raise_for_status()
+        return resp
+
     def _post(
         self, path: str, payload: dict[str, Any], *, timeout: int = 30
     ) -> dict[str, Any]:
@@ -576,21 +604,9 @@ class SolarOfThingsAPI:
         On second 401 (after refresh) raises TokenExpiredError.
         Uses API_BASE_URL (solar.siseli.com) — not the auth base URL.
         """
-        self._ensure_token_valid()
-
-        resp = self.session.post(f"{API_BASE_URL}{path}", json=payload, timeout=timeout)
-
-        if resp.status_code == 401:
-            _LOGGER.warning("SolarOfThings: received 401; forcing token refresh")
-            # Force an immediate refresh even if _token_needs_refresh() is False
-            self._access_expires = None
-            self._ensure_token_valid()
-            resp = self.session.post(
-                f"{API_BASE_URL}{path}", json=payload, timeout=timeout
-            )
-
-        resp.raise_for_status()
-        return resp.json()
+        return self._send(
+            "POST", f"{API_BASE_URL}{path}", json=payload, timeout=timeout
+        ).json()
 
     # ─── Public properties (for persistence in HA config entry) ───────────────
 
@@ -982,16 +998,18 @@ class SolarOfThingsAPI:
 
         return states
 
-    def _write_setting(self, device_id: str, key: str, value: Any) -> None:
-        """Write a single device setting key=value via the remote config write API."""
-        self._ensure_token_valid()
+    def write_setting(self, device_id: str, key: str, value: Any) -> None:
+        """Write a single device setting key=value via the remote config write API.
+
+        Raises TokenExpiredError on unrecoverable auth failure, SettingsWriteError
+        when the cloud rejects the value, requests.RequestException on transport
+        errors.
+        """
         url = f"{API_BASE_URL}{API_SETTINGS_SET}?deviceId={device_id}"
         payload = {"deviceId": device_id, "key": key, "value": value}
-        resp = self.session.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+        data = self._send("POST", url, json=payload, timeout=30).json()
         if data.get("code") not in (0, None):
-            raise RuntimeError(
+            raise SettingsWriteError(
                 f"Settings write error code={data.get('code')} "
                 f"message={data.get('message')} (key={key})"
             )
@@ -1040,7 +1058,7 @@ class SolarOfThingsAPI:
     def update_device_settings(self, device_id: str, settings: dict[str, Any]) -> None:
         """Write multiple settings (one API call per key)."""
         for key, value in settings.items():
-            self._write_setting(device_id, key, value)
+            self.write_setting(device_id, key, value)
 
     def set_operating_mode(self, device_id: str, mode: str) -> None:
         """Set Output Source Priority.  mode is one of OUTPUT_MODE_MAP keys."""
@@ -1050,7 +1068,7 @@ class SolarOfThingsAPI:
                 f"Unknown operating mode: {mode!r}. "
                 f"Valid options: {list(OUTPUT_MODE_MAP)!r}"
             )
-        self._write_setting(device_id, "outputSourcePrioritySetting", value)
+        self.write_setting(device_id, "outputSourcePrioritySetting", value)
 
     def set_battery_priority(self, device_id: str, mode: str) -> None:
         """Set Charger Priority.  mode is one of CHARGER_PRIORITY_MAP keys."""
@@ -1060,15 +1078,15 @@ class SolarOfThingsAPI:
                 f"Unknown battery priority: {mode!r}. "
                 f"Valid options: {list(CHARGER_PRIORITY_MAP)!r}"
             )
-        self._write_setting(device_id, "chargerSourcePrioritySetting", value)
+        self.write_setting(device_id, "chargerSourcePrioritySetting", value)
 
     def set_grid_charging(self, device_id: str, enabled: bool) -> None:
         """Set AC Input Range: Appliance (0, grid charging allowed) / UPS (1, bypass)."""
-        self._write_setting(device_id, "acInputRangeSetting", 0 if enabled else 1)
+        self.write_setting(device_id, "acInputRangeSetting", 0 if enabled else 1)
 
     def set_grid_feed_in(self, device_id: str, enabled: bool) -> None:
         """Enable or disable the GRID grid switch (batteryPowerLimitingSetting)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "batteryPowerLimitingSetting", 1 if enabled else 0
         )
 
@@ -1076,67 +1094,67 @@ class SolarOfThingsAPI:
         """Set Output Source Priority to SBU (backup/off-grid priority) when True,
         or SUB (solar-first, grid-supplemented) when False."""
         value = 2 if enabled else 1  # SBU=2 (battery before grid), SUB=1
-        self._write_setting(device_id, "outputSourcePrioritySetting", value)
+        self.write_setting(device_id, "outputSourcePrioritySetting", value)
 
     def set_maximum_total_charging_current(self, device_id: str, value: int) -> None:
         """Set Maximum Total Charging Current (10-160 A)."""
-        self._write_setting(device_id, "setMaxChargingCurrent", value)
+        self.write_setting(device_id, "setMaxChargingCurrent", value)
 
     def set_max_utility_charge_current(self, device_id: str, value: int) -> None:
         """Set Max Utility Charge Current (10-140 A)."""
-        self._write_setting(device_id, "setUtilityMaxChargingCurrent", value)
+        self.write_setting(device_id, "setUtilityMaxChargingCurrent", value)
 
     # ─── New setting setters ──────────────────────────────────────────────────
 
     def set_bms_function_enable(self, device_id: str, enabled: bool) -> None:
         """Enable/disable BMS function (0=Off, 1=On)."""
-        self._write_setting(device_id, "bmsFunctionEnableSetting", 1 if enabled else 0)
+        self.write_setting(device_id, "bmsFunctionEnableSetting", 1 if enabled else 0)
 
     def set_bms_lock_machine_battery_capacity(self, device_id: str, value: int) -> None:
         """Set BMS Inverter Cutoff (5-95 %)."""
-        self._write_setting(device_id, "bmsLockMachineBatteryCapacity", value)
+        self.write_setting(device_id, "bmsLockMachineBatteryCapacity", value)
 
     def set_battery_constant_charging_voltage(
         self, device_id: str, value: float
     ) -> None:
         """Set Bulk Voltage (48-61 V)."""
-        self._write_setting(device_id, "setBatteryCVChargeVoltage", value)
+        self.write_setting(device_id, "setBatteryCVChargeVoltage", value)
 
     def set_battery_equalization_interval(self, device_id: str, value: int) -> None:
         """Set Equalization interval (0-90 days)."""
-        self._write_setting(device_id, "batteryEqualizationIntervalSetting", value)
+        self.write_setting(device_id, "batteryEqualizationIntervalSetting", value)
 
     def set_battery_equalization_mode_enable(
         self, device_id: str, enabled: bool
     ) -> None:
         """Enable/disable equalization (0=Off, 1=On)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "batteryEqualizationModeEnableSetting", 1 if enabled else 0
         )
 
     def set_battery_equalization_time(self, device_id: str, value: int) -> None:
         """Set Equalization time (5-900 min)."""
-        self._write_setting(device_id, "batteryEqualizationTimeSetting", value)
+        self.write_setting(device_id, "batteryEqualizationTimeSetting", value)
 
     def set_battery_equalization_timeout(self, device_id: str, value: int) -> None:
         """Set Equalization timeout (5-900 min)."""
-        self._write_setting(device_id, "batteryEqualizationTimeoutSetting", value)
+        self.write_setting(device_id, "batteryEqualizationTimeoutSetting", value)
 
     def set_battery_equalization_voltage(self, device_id: str, value: float) -> None:
         """Set Equalization voltage (48-62 V)."""
-        self._write_setting(device_id, "batteryEqualizationVoltageSetting", value)
+        self.write_setting(device_id, "batteryEqualizationVoltageSetting", value)
 
     def set_battery_float_charging_voltage(self, device_id: str, value: float) -> None:
         """Set Float Voltage (48-61 V)."""
-        self._write_setting(device_id, "setBatteryFloatChargingVoltage", value)
+        self.write_setting(device_id, "setBatteryFloatChargingVoltage", value)
 
     def set_battery_recharge_voltage(self, device_id: str, value: float) -> None:
         """Set SBU Utility Takeover voltage (44-54 V)."""
-        self._write_setting(device_id, "batteryRechargeVoltageSetting", value)
+        self.write_setting(device_id, "batteryRechargeVoltageSetting", value)
 
     def set_battery_redischarge_voltage(self, device_id: str, value: float) -> None:
         """Set SBU Battery Takeover voltage (48-58 V)."""
-        self._write_setting(device_id, "batteryRedischargeVoltageSetting", value)
+        self.write_setting(device_id, "batteryRedischargeVoltageSetting", value)
 
     def set_battery_type(self, device_id: str, mode: str) -> None:
         """Set Battery Type.  mode is one of BATTERY_TYPE_MAP keys."""
@@ -1146,23 +1164,23 @@ class SolarOfThingsAPI:
                 f"Unknown battery type: {mode!r}. "
                 f"Valid options: {list(BATTERY_TYPE_MAP)!r}"
             )
-        self._write_setting(device_id, "batteryTypeSetting", value)
+        self.write_setting(device_id, "batteryTypeSetting", value)
 
     def set_ct_zero_power(self, device_id: str, value: float) -> None:
         """Set Main input power (0.01-0.5 kW)."""
-        self._write_setting(device_id, "ctZeroPower", value)
+        self.write_setting(device_id, "ctZeroPower", value)
 
     def set_discharge_current_limit(self, device_id: str, value: int) -> None:
         """Set Maximum Battery Discharge Current (20-200 A)."""
-        self._write_setting(device_id, "dischargeCurrentLimit", value)
+        self.write_setting(device_id, "dischargeCurrentLimit", value)
 
     def set_inverter_startup_battery_capacity(self, device_id: str, value: int) -> None:
         """Set Battery startup SOC (5-100 %)."""
-        self._write_setting(device_id, "inverterStartupBatteryCapacity", value)
+        self.write_setting(device_id, "inverterStartupBatteryCapacity", value)
 
     def set_low_battery_alarm_voltage(self, device_id: str, value: float) -> None:
         """Set Battery Low Alarm voltage (40-54 V)."""
-        self._write_setting(device_id, "lowBatteryAlarmVoltageSetting", value)
+        self.write_setting(device_id, "lowBatteryAlarmVoltageSetting", value)
 
     def set_rated_frequency(self, device_id: str, mode: str) -> None:
         """Set Output Frequency.  mode is one of RATED_FREQUENCY_MAP keys."""
@@ -1172,7 +1190,7 @@ class SolarOfThingsAPI:
                 f"Unknown frequency: {mode!r}. "
                 f"Valid options: {list(RATED_FREQUENCY_MAP)!r}"
             )
-        self._write_setting(device_id, "ratedFrequencySetting", value)
+        self.write_setting(device_id, "ratedFrequencySetting", value)
 
     def set_rated_voltage(self, device_id: str, mode: str) -> None:
         """Set Output Voltage.  mode is one of RATED_VOLTAGE_MAP keys."""
@@ -1181,7 +1199,7 @@ class SolarOfThingsAPI:
             raise ValueError(
                 f"Unknown voltage: {mode!r}. Valid options: {list(RATED_VOLTAGE_MAP)!r}"
             )
-        self._write_setting(device_id, "ratedVoltageSetting", value)
+        self.write_setting(device_id, "ratedVoltageSetting", value)
 
     def set_grid_connection_protocol_type(self, device_id: str, mode: str) -> None:
         """Set Grid Connection Type.  mode is one of GRID_CONNECTION_PROTOCOL_TYPE_MAP keys."""
@@ -1191,57 +1209,57 @@ class SolarOfThingsAPI:
                 f"Unknown grid connection type: {mode!r}. "
                 f"Valid options: {list(GRID_CONNECTION_PROTOCOL_TYPE_MAP)!r}"
             )
-        self._write_setting(device_id, "gridConnectionProtocolTypeSetting", value)
+        self.write_setting(device_id, "gridConnectionProtocolTypeSetting", value)
 
     def set_restore_battery_discharging_capacity(
         self, device_id: str, value: int
     ) -> None:
         """Set Battery DC Takeover capacity (5-100 %)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "restoreBatteryDischargingBatteryCapacity", value
         )
 
     def set_restore_mains_charging_capacity(self, device_id: str, value: int) -> None:
         """Set Battery Mains Charging Takeover capacity (5-95 %)."""
-        self._write_setting(device_id, "restoreMainsChargingBatteryCapacity", value)
+        self.write_setting(device_id, "restoreMainsChargingBatteryCapacity", value)
 
     def set_backlight_on(self, device_id: str, enabled: bool) -> None:
         """Enable/disable LCD backlight (0=Disable, 1=Enable)."""
-        self._write_setting(device_id, "backlightOn", 1 if enabled else 0)
+        self.write_setting(device_id, "backlightOn", 1 if enabled else 0)
 
     def set_buzzer_on(self, device_id: str, enabled: bool) -> None:
         """Enable/disable buzzer (0=Disable, 1=Enable)."""
-        self._write_setting(device_id, "buzzerOn", 1 if enabled else 0)
+        self.write_setting(device_id, "buzzerOn", 1 if enabled else 0)
 
     def set_display_auto_homepage(self, device_id: str, enabled: bool) -> None:
         """Enable/disable LCD auto return to homepage (0=Disable, 1=Enable)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "displayAutomaticallyReturnsToHomepage", 1 if enabled else 0
         )
 
     def set_eco_mode(self, device_id: str, enabled: bool) -> None:
         """Enable/disable ECO mode (0=Disable, 1=Enable)."""
-        self._write_setting(device_id, "ecoMode", 1 if enabled else 0)
+        self.write_setting(device_id, "ecoMode", 1 if enabled else 0)
 
     def set_input_source_beep(self, device_id: str, enabled: bool) -> None:
         """Enable/disable input source change beep (0=Disable, 1=Enable)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "inputSourceDetectionPromptSound", 1 if enabled else 0
         )
 
     def set_overheat_restart(self, device_id: str, enabled: bool) -> None:
         """Enable/disable overheat restart (0=Disable, 1=Enable)."""
-        self._write_setting(
+        self.write_setting(
             device_id, "overTemperatureAutomaticRestart", 1 if enabled else 0
         )
 
     def set_overload_bypass(self, device_id: str, enabled: bool) -> None:
         """Enable/disable overload bypass (0=Disable, 1=Enable)."""
-        self._write_setting(device_id, "overloadToBypassOperation", 1 if enabled else 0)
+        self.write_setting(device_id, "overloadToBypassOperation", 1 if enabled else 0)
 
     def set_toggle_setting(self, device_id: str, key: str, enabled: bool) -> None:
         """Generic setter for toggle settings (writes 0 or 1)."""
-        self._write_setting(device_id, key, 1 if enabled else 0)
+        self.write_setting(device_id, key, 1 if enabled else 0)
 
     def test_connection(self, station_id: str | None = None) -> bool:
         """Return True if we can reach the device-list endpoint successfully."""

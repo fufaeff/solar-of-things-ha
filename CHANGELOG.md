@@ -1,3 +1,23 @@
+## [2.4.4] - 2026-11-18
+
+### Fixed
+- **Entities missing on Home Assistant before 2026.8**: `via_device_id` is only accepted in
+  `DeviceInfo` since HA 2026.8; older versions rejected the device info and dropped every
+  inverter entity. The integration now detects support and falls back to `via_device` there.
+- **Setting writes and expired tokens**: writes now refresh the access token and retry once on
+  HTTP 401, and start the re-authentication flow when the token cannot be refreshed.
+- **Clear errors on failed writes**: switch, number and select actions raise a
+  `HomeAssistantError` with a readable message instead of a raw `RuntimeError`/`HTTPError`.
+- **Controls flipping back after a change**: a written value is shown right away and kept until
+  the cloud settings cache reports it (up to 5 minutes), instead of reverting on the next poll.
+
+### Changed
+- New shared `entity.py`: one place builds `DeviceInfo` and performs setting writes for all
+  platforms; entities no longer read the coordinator's private `_entry`.
+- `api.py`: `_write_setting` is now public `write_setting`; the cloud rejecting a value raises
+  `SettingsWriteError`.
+- Bumped manifest version and `api.py` User-Agent to 2.4.4.
+
 ## [2.3.5] - 2026-06-16
 
 ### Fixed

@@ -17,9 +17,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, NUMBER_SETTING_DEFINITIONS
+from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,34 +118,17 @@ def _get_setting_value(coordinator_data: dict | None, key: str) -> float | None:
         return None
 
 
-class _BaseNumber(CoordinatorEntity, NumberEntity):
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(coordinator)
-        self._api = api
-        self._station_id = station_id
-        self._device_id = device_id
-        self._device_name = device_name
+class _BaseNumber(SolarOfThingsDeviceEntity, NumberEntity):
+    _setting_key: str
+    # None -> write as int; N -> write as float rounded to N decimals
+    _value_decimals: int | None = None
 
-    @property
-    def device_info(self):
-        info = {
-            "identifiers": {(DOMAIN, self._station_id, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": "Siseli",
-            "model": (self.coordinator.data.get("device_meta") or {}).get("model")
-            if self.coordinator.data
-            else None,
-        }
-        station_device_id = (
-            self.coordinator.hass.data.get(DOMAIN, {})
-            .get(getattr(self.coordinator._entry, "entry_id", ""), {})
-            .get("station_device_id")
-        )
-        if station_device_id:
-            info["via_device_id"] = station_device_id
-        return info
+    async def async_set_native_value(self, value: float) -> None:
+        if self._value_decimals is None:
+            raw: float | int = int(value)
+        else:
+            raw = round(value, self._value_decimals)
+        await self._async_write_setting(self._setting_key, raw)
 
     @property
     def native_value(self):
@@ -171,12 +154,6 @@ class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.CURRENT
         self._attr_icon = "mdi:battery-arrow-up"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_maximum_total_charging_current, self._device_id, int(value)
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsMaxUtilityChargeCurrentNumber(_BaseNumber):
     _setting_key = "setUtilityMaxChargingCurrent"
@@ -197,12 +174,6 @@ class SolarOfThingsMaxUtilityChargeCurrentNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.CURRENT
         self._attr_icon = "mdi:transmission-tower-import"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_max_utility_charge_current, self._device_id, int(value)
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBmsLockMachineBatteryCapacityNumber(_BaseNumber):
     _setting_key = "bmsLockMachineBatteryCapacity"
@@ -222,17 +193,10 @@ class SolarOfThingsBmsLockMachineBatteryCapacityNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:battery-arrow-down"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_bms_lock_machine_battery_capacity,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryConstantChargingVoltageNumber(_BaseNumber):
     _setting_key = "setBatteryCVChargeVoltage"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -249,14 +213,6 @@ class SolarOfThingsBatteryConstantChargingVoltageNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:battery-charging-high"
-
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_constant_charging_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
 
 
 class SolarOfThingsBatteryEqualizationIntervalNumber(_BaseNumber):
@@ -277,14 +233,6 @@ class SolarOfThingsBatteryEqualizationIntervalNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:calendar-repeat"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_equalization_interval,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryEqualizationTimeNumber(_BaseNumber):
     _setting_key = "batteryEqualizationTimeSetting"
@@ -303,14 +251,6 @@ class SolarOfThingsBatteryEqualizationTimeNumber(_BaseNumber):
         self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:clock-outline"
-
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_equalization_time,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
 
 
 class SolarOfThingsBatteryEqualizationTimeoutNumber(_BaseNumber):
@@ -331,17 +271,10 @@ class SolarOfThingsBatteryEqualizationTimeoutNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:timer-outline"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_equalization_timeout,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryEqualizationVoltageNumber(_BaseNumber):
     _setting_key = "batteryEqualizationVoltageSetting"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -359,17 +292,10 @@ class SolarOfThingsBatteryEqualizationVoltageNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:battery-charging-high"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_equalization_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryFloatChargingVoltageNumber(_BaseNumber):
     _setting_key = "setBatteryFloatChargingVoltage"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -387,17 +313,10 @@ class SolarOfThingsBatteryFloatChargingVoltageNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:battery-heart"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_float_charging_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryRechargeVoltageNumber(_BaseNumber):
     _setting_key = "batteryRechargeVoltageSetting"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -415,17 +334,10 @@ class SolarOfThingsBatteryRechargeVoltageNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:transmission-tower-import"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_recharge_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryRedischargeVoltageNumber(_BaseNumber):
     _setting_key = "batteryRedischargeVoltageSetting"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -443,17 +355,10 @@ class SolarOfThingsBatteryRedischargeVoltageNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:battery-check"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_redischarge_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsCtZeroPowerNumber(_BaseNumber):
     _setting_key = "ctZeroPower"
+    _value_decimals = 2
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -467,14 +372,6 @@ class SolarOfThingsCtZeroPowerNumber(_BaseNumber):
         self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:home-lightning-bolt"
-
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_ct_zero_power,
-            self._device_id,
-            round(value, 2),
-        )
-        await self.coordinator.async_request_refresh()
 
 
 class SolarOfThingsDischargeCurrentLimitNumber(_BaseNumber):
@@ -496,14 +393,6 @@ class SolarOfThingsDischargeCurrentLimitNumber(_BaseNumber):
         self._attr_device_class = NumberDeviceClass.CURRENT
         self._attr_icon = "mdi:battery-arrow-down"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_discharge_current_limit,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsInverterStartupBatteryCapacityNumber(_BaseNumber):
     _setting_key = "inverterStartupBatteryCapacity"
@@ -523,17 +412,10 @@ class SolarOfThingsInverterStartupBatteryCapacityNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:battery-check"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_inverter_startup_battery_capacity,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsLowBatteryAlarmVoltageNumber(_BaseNumber):
     _setting_key = "lowBatteryAlarmVoltageSetting"
+    _value_decimals = 1
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
@@ -550,14 +432,6 @@ class SolarOfThingsLowBatteryAlarmVoltageNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_device_class = NumberDeviceClass.VOLTAGE
         self._attr_icon = "mdi:battery-alert"
-
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_low_battery_alarm_voltage,
-            self._device_id,
-            round(value, 1),
-        )
-        await self.coordinator.async_request_refresh()
 
 
 class SolarOfThingsRestoreBatteryDischargingCapacityNumber(_BaseNumber):
@@ -578,14 +452,6 @@ class SolarOfThingsRestoreBatteryDischargingCapacityNumber(_BaseNumber):
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:battery-charging-high"
 
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_restore_battery_discharging_capacity,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsRestoreMainsChargingCapacityNumber(_BaseNumber):
     _setting_key = "restoreMainsChargingBatteryCapacity"
@@ -604,11 +470,3 @@ class SolarOfThingsRestoreMainsChargingCapacityNumber(_BaseNumber):
         self._attr_native_unit_of_measurement = "%"
         self._attr_mode = NumberMode.BOX
         self._attr_icon = "mdi:battery-charging-high"
-
-    async def async_set_native_value(self, value: float) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_restore_mains_charging_capacity,
-            self._device_id,
-            int(value),
-        )
-        await self.coordinator.async_request_refresh()
