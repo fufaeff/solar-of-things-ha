@@ -7,24 +7,20 @@ import logging
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    BATTERY_TYPE_MAP,
     BATTERY_TYPE_REVERSE,
-    CHARGER_PRIORITY_MAP,
     CHARGER_PRIORITY_REVERSE,
     DOMAIN,
-    GRID_CONNECTION_PROTOCOL_TYPE_MAP,
     GRID_CONNECTION_PROTOCOL_TYPE_REVERSE,
-    OUTPUT_MODE_MAP,
     OUTPUT_MODE_REVERSE,
-    RATED_FREQUENCY_MAP,
     RATED_FREQUENCY_REVERSE,
-    RATED_VOLTAGE_MAP,
     RATED_VOLTAGE_REVERSE,
 )
+from .entity import inverter_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,16 +94,10 @@ class _BaseSelect(CoordinatorEntity, SelectEntity):
         self._device_name = device_name
 
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._station_id, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": "Siseli",
-            "model": (self.coordinator.data.get("device_meta") or {}).get("model")
-            if self.coordinator.data
-            else None,
-            "via_device": (DOMAIN, self._station_id),
-        }
+    def device_info(self) -> DeviceInfo:
+        return inverter_device_info(
+            self.coordinator.data, self._station_id, self._device_id, self._device_name
+        )
 
     def _get_setting_value(self, key: str) -> int | None:
         """Extract the integer value for a device setting key from coordinator data."""

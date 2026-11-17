@@ -67,8 +67,9 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import requests
 
@@ -102,6 +103,9 @@ from .const import (
     OUTPUT_MODE_MAP,
     RATED_FREQUENCY_MAP,
     RATED_VOLTAGE_MAP,
+    TIME_SERIES_MAX_POINTS,
+    TIME_SERIES_WINDOW_MINUTES,
+    TOKEN_INVALID_CODES,
     TOKEN_REFRESH_LEAD_SECONDS,
 )
 from .const import (
@@ -128,6 +132,32 @@ class TokenExpiredError(Exception):
 
 class AuthenticationError(Exception):
     """Raised when login credentials are rejected by the server."""
+
+
+def _is_ok_code(code: Any) -> bool:
+    """Return True for a successful business-level response code."""
+    return code in (0, None, "0")
+
+
+def _is_token_invalid_code(code: Any) -> bool:
+    """Return True if a business-level response code means 'token invalid'."""
+    try:
+        return int(code) in TOKEN_INVALID_CODES
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_auth_failure(resp: requests.Response) -> bool:
+    """Return True if a data-endpoint response signals an invalid/expired token."""
+    if resp.status_code == 401:
+        return True
+    if resp.status_code != 200:
+        return False
+    try:
+        data = resp.json()
+    except ValueError:
+        return False
+    return isinstance(data, dict) and _is_token_invalid_code(data.get("code"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -221,8 +251,8 @@ def _parse_expiry(value: str | None) -> datetime | None:
         cleaned = value.replace("Z", "+00:00")
         dt = datetime.fromisoformat(cleaned)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
     except Exception:
         return None
 
@@ -303,7 +333,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.4.1 "
+                    "HomeAssistant-SolarOfThings/2.5.0 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -419,10 +449,7 @@ class SolarOfThingsAPI:
             )
 
         # Fallback to signed request if unsigned was rejected
-        if resp.status_code in (401, 403) or (
-            resp.status_code == 200
-            and resp.json().get("code") in (10002, 10003, "10002", "10003")
-        ):
+        if resp.status_code == 403 or _is_auth_failure(resp):
             try:
                 signed_headers = _make_signed_headers(body_bytes)
                 resp = requests.post(
@@ -510,22 +537,30 @@ class SolarOfThingsAPI:
             # Unknown expiry: only refresh if we already have a refresh token
             return bool(self._refresh_token)
         lead = timedelta(seconds=TOKEN_REFRESH_LEAD_SECONDS)
-        return datetime.now(timezone.utc) >= (self._access_expires - lead)
+        return datetime.now(UTC) >= (self._access_expires - lead)
 
-    def _ensure_token_valid(self) -> None:
-        """Proactively refresh the access token if needed.
+    def _ensure_token_valid(
+        self, *, force: bool = False, stale_token: str | None = None
+    ) -> None:
+        """Refresh the access token if needed (or unconditionally with force=True).
+
+        force=True is used after the server rejected ``stale_token``; if another
+        thread has already replaced that token in the meantime, nothing is done.
 
         Thread-safe: uses a lock so parallel coordinator updates don't
         trigger multiple simultaneous refresh calls.
 
         Raises TokenExpiredError when all refresh strategies are exhausted.
         """
-        if not self._token_needs_refresh():
+        if not force and not self._token_needs_refresh():
             return
 
         with self._refresh_lock:
             # Double-check inside the lock (another thread may have refreshed)
-            if not self._token_needs_refresh():
+            if force:
+                if stale_token is not None and self._access_token != stale_token:
+                    return
+            elif not self._token_needs_refresh():
                 return
 
             _LOGGER.info("SolarOfThings: access token expiring; attempting refresh")
@@ -568,29 +603,55 @@ class SolarOfThingsAPI:
 
     # ─── Internal HTTP helper ──────────────────────────────────────────────────
 
-    def _post(
-        self, path: str, payload: dict[str, Any], *, timeout: int = 30
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: Any = None,
+        timeout: int = 30,
     ) -> dict[str, Any]:
-        """Perform a POST to a data endpoint, automatically refreshing the token on 401.
+        """Call a data endpoint and return the decoded JSON body.
 
-        On second 401 (after refresh) raises TokenExpiredError.
+        If the server rejects the token (HTTP 401 or a TOKEN_INVALID_CODES
+        business code) the token is force-refreshed and the request retried
+        once.  If that is impossible or the retry is rejected as well,
+        TokenExpiredError is raised so the integration can start re-auth.
         Uses API_BASE_URL (solar.siseli.com) — not the auth base URL.
         """
         self._ensure_token_valid()
+        url = f"{API_BASE_URL}{path}"
+        used_token = self._access_token
 
-        resp = self.session.post(f"{API_BASE_URL}{path}", json=payload, timeout=timeout)
+        resp = self.session.request(
+            method, url, params=params, json=json, timeout=timeout
+        )
 
-        if resp.status_code == 401:
-            _LOGGER.warning("SolarOfThings: received 401; forcing token refresh")
-            # Force an immediate refresh even if _token_needs_refresh() is False
-            self._access_expires = None
-            self._ensure_token_valid()
-            resp = self.session.post(
-                f"{API_BASE_URL}{path}", json=payload, timeout=timeout
+        if _is_auth_failure(resp):
+            _LOGGER.warning(
+                "SolarOfThings: token rejected by %s (HTTP %s); forcing refresh",
+                path,
+                resp.status_code,
             )
+            self._ensure_token_valid(force=True, stale_token=used_token)
+            resp = self.session.request(
+                method, url, params=params, json=json, timeout=timeout
+            )
+            if _is_auth_failure(resp):
+                raise TokenExpiredError(
+                    f"Token rejected by {path} even after refresh "
+                    f"(HTTP {resp.status_code})."
+                )
 
         resp.raise_for_status()
         return resp.json()
+
+    def _post(
+        self, path: str, payload: dict[str, Any], *, timeout: int = 30
+    ) -> dict[str, Any]:
+        """POST a JSON payload to a data endpoint (see _request)."""
+        return self._request("POST", path, json=payload, timeout=timeout)
 
     # ─── Public properties (for persistence in HA config entry) ───────────────
 
@@ -645,7 +706,7 @@ class SolarOfThingsAPI:
 
             data = self._post(API_DEVICE_LIST, payload)
 
-            if data.get("code") not in (0, None):
+            if not _is_ok_code(data.get("code")):
                 raise RuntimeError(
                     f"Device list error code={data.get('code')} "
                     f"message={data.get('message')}"
@@ -702,9 +763,13 @@ class SolarOfThingsAPI:
     # ─── Time-series (per device) ──────────────────────────────────────────────
 
     def fetch_latest_data(self, device_id: str) -> dict[str, Any]:
-        """Fetch the latest readings for a device (last 1 hour)."""
+        """Fetch the latest readings for a device.
+
+        Only the newest sample of each key is used, so a short window is
+        requested to keep the per-minute polling cheap for the cloud.
+        """
         end_time = self._now()
-        start_time = end_time - timedelta(hours=1)
+        start_time = end_time - timedelta(minutes=TIME_SERIES_WINDOW_MINUTES)
 
         keys = [
             "pvInputPower",
@@ -721,7 +786,7 @@ class SolarOfThingsAPI:
             API_TIME_SERIES,
             {
                 "deviceId": device_id,
-                "count": 2000,
+                "count": TIME_SERIES_MAX_POINTS,
                 "page": 1,
                 "fromTime": self._format_time(start_time),
                 "toTime": self._format_time(end_time),
@@ -730,7 +795,7 @@ class SolarOfThingsAPI:
             },
         )
 
-        if data.get("code") not in (0, None):
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Timeseries error code={data.get('code')} "
                 f"message={data.get('message')}"
@@ -779,19 +844,16 @@ class SolarOfThingsAPI:
 
     def fetch_latest_state(self, device: str) -> dict[str, Any]:
         """Fetch the latest state (all fields) for a device via GET with retry."""
-        self._ensure_token_valid()
-        url = f"{API_BASE_URL}{API_LATEST_STATE}?deviceId={device}"
-
         last_error: Exception | None = None
         for attempt in range(2):
             if attempt > 0:
                 time.sleep(1.5)
             try:
-                resp = self.session.get(url, timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
+                data = self._request(
+                    "GET", API_LATEST_STATE, params={"deviceId": device}
+                )
 
-                if data.get("code") not in (0, None):
+                if not _is_ok_code(data.get("code")):
                     last_error = RuntimeError(
                         f"Latest state error code={data.get('code')} "
                         f"message={data.get('message')}"
@@ -825,17 +887,17 @@ class SolarOfThingsAPI:
         year = now.year
         month_key = f"{year}-{str(now.month).zfill(2)}"
 
-        self._ensure_token_valid()
-        resp = self.session.post(
-            f"{API_BASE_URL}{API_MONTHLY_SUMMARY}"
-            f"?stationId={station_id}&summaryCategoryKey=pvInverterElectricityQuantityClass",
+        data = self._request(
+            "POST",
+            API_MONTHLY_SUMMARY,
+            params={
+                "stationId": station_id,
+                "summaryCategoryKey": "pvInverterElectricityQuantityClass",
+            },
             json={"time": str(year)},
-            timeout=30,
         )
-        resp.raise_for_status()
-        data = resp.json()
 
-        if data.get("code") not in (0, None):
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Monthly summary error code={data.get('code')} "
                 f"message={data.get('message')}"
@@ -902,13 +964,11 @@ class SolarOfThingsAPI:
         Returns the same format as fetch_settings() (flat dict of setting objects).
         """
         # Step 1: Initiate batch read
-        self._ensure_token_valid()
-        url = f"{API_BASE_URL}{self.API_BATCH_READ_INIT}?deviceId={device_id}"
-        resp = self.session.post(url, json={}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+        data = self._request(
+            "POST", self.API_BATCH_READ_INIT, params={"deviceId": device_id}, json={}
+        )
 
-        if data.get("code") not in (0, None):
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Batch read init error code={data.get('code')} "
                 f"message={data.get('message')}"
@@ -930,15 +990,13 @@ class SolarOfThingsAPI:
         for attempt in range(1, max_poll_attempts + 1):
             time.sleep(poll_delay)
 
-            details_url = (
-                f"{API_BASE_URL}{self.API_BATCH_READ_DETAILS}"
-                f"?batchReadId={batch_read_id}"
+            data = self._request(
+                "GET",
+                self.API_BATCH_READ_DETAILS,
+                params={"batchReadId": batch_read_id},
             )
-            resp = self.session.get(details_url, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
 
-            if data.get("code") not in (0, None):
+            if not _is_ok_code(data.get("code")):
                 _LOGGER.debug(
                     "SolarOfThings device %s: batch read poll on attempt %d returned code=%s message=%s",
                     device_id,
@@ -984,13 +1042,11 @@ class SolarOfThingsAPI:
 
     def _write_setting(self, device_id: str, key: str, value: Any) -> None:
         """Write a single device setting key=value via the remote config write API."""
-        self._ensure_token_valid()
-        url = f"{API_BASE_URL}{API_SETTINGS_SET}?deviceId={device_id}"
         payload = {"deviceId": device_id, "key": key, "value": value}
-        resp = self.session.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("code") not in (0, None):
+        data = self._request(
+            "POST", API_SETTINGS_SET, params={"deviceId": device_id}, json=payload
+        )
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Settings write error code={data.get('code')} "
                 f"message={data.get('message')} (key={key})"
@@ -1003,12 +1059,10 @@ class SolarOfThingsAPI:
         contains at least 'key', 'value', and 'valueDisplay' fields.
         The endpoint accepts a plain IOT-Token header (no IOT-Open-Sign).
         """
-        self._ensure_token_valid()
-        url = f"{API_BASE_URL}{API_SETTINGS_GET}?deviceId={device_id}"
-        resp = self.session.post(url, json={}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("code") not in (0, None):
+        data = self._request(
+            "POST", API_SETTINGS_GET, params={"deviceId": device_id}, json={}
+        )
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Settings fetch error code={data.get('code')} "
                 f"message={data.get('message')}"
@@ -1023,13 +1077,14 @@ class SolarOfThingsAPI:
 
         Used for settings that are not returned by the cached settings endpoint.
         """
-        self._ensure_token_valid()
-        url = f"{API_BASE_URL}/apis/remote/device/config/read?deviceId={device_id}"
         payload = {"id": device_id, "key": key}
-        resp = self.session.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("code") not in (0, None):
+        data = self._request(
+            "POST",
+            "/apis/remote/device/config/read",
+            params={"deviceId": device_id},
+            json=payload,
+        )
+        if not _is_ok_code(data.get("code")):
             raise RuntimeError(
                 f"Setting read error code={data.get('code')} "
                 f"message={data.get('message')} (key={key})"
@@ -1246,7 +1301,7 @@ class SolarOfThingsAPI:
     def test_connection(self, station_id: str | None = None) -> bool:
         """Return True if we can reach the device-list endpoint successfully."""
         try:
-            devices = self.list_devices(station_id, page_size=1)
+            self.list_devices(station_id, page_size=1)
             return True
         except Exception as err:
             _LOGGER.error("SolarOfThings: connection test failed: %s", err)

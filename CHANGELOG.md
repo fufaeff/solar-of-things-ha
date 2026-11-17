@@ -1,3 +1,21 @@
+## [2.5.0] - 2026-11-17
+
+### Fixed
+- **Expired tokens now trigger re-auth**: HTTP 401 and token-invalid business codes (10002/10003) from any data endpoint force a token refresh and one retry; if the token cannot be refreshed (e.g. legacy IOT-token mode) `TokenExpiredError` is raised and the re-auth flow starts instead of the data silently freezing.
+- **Bounded stale data**: coordinators keep previous data for at most 5 consecutive failed device updates (2 for the station); after that entities become unavailable.
+- **Energy integrators no longer over-count during outages**: accumulated energy sensors only integrate freshly fetched power values.
+- **No reload on token refresh**: the update listener reloads the entry only when options or credentials change, not when refreshed tokens are persisted.
+- **Device registry**: inverter identifiers are now valid `(domain, id)` pairs (existing devices are migrated in place); the station device is registered before inverters reference it via `via_device`.
+
+### Changed
+- Requires Home Assistant 2024.12 or newer (`ConfigFlowResult`, options flow without explicit `config_entry`, `async_update_reload_and_abort`).
+- Time-series polling requests a 15-minute window (max 100 points) instead of 1 hour / 2000 points.
+- Documentation links in the config flow point to this repository.
+
+### Development
+- CI runs hassfest, HACS validation, ruff and the test suite; test failures now fail the build.
+- New tests for the API client (signing, login, token refresh, parsing) and for setup/coordinators/energy integration.
+
 ## [2.3.5] - 2026-06-16
 
 ### Fixed

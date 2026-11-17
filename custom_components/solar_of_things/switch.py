@@ -7,10 +7,12 @@ import logging
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, TOGGLE_SETTING_DEFINITIONS
+from .const import DOMAIN
+from .entity import inverter_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,16 +103,10 @@ class _BaseSwitch(CoordinatorEntity, SwitchEntity):
         self._device_name = device_name
 
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._station_id, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": "Siseli",
-            "model": (self.coordinator.data.get("device_meta") or {}).get("model")
-            if self.coordinator.data
-            else None,
-            "via_device": (DOMAIN, self._station_id),
-        }
+    def device_info(self) -> DeviceInfo:
+        return inverter_device_info(
+            self.coordinator.data, self._station_id, self._device_id, self._device_name
+        )
 
 
 class SolarOfThingsGridChargingSwitch(_BaseSwitch):

@@ -1,0 +1,6 @@
+# Test/lint dependencies (CI and local development).
+# pytest-homeassistant-custom-component 0.13.205 pins Home Assistant 2025.1.4,
+# the newest release that still runs on Python 3.12.
+pytest-homeassistant-custom-component==0.13.205
+pycryptodome>=3.9.0
+ruff==0.17.5

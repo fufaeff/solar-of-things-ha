@@ -16,28 +16,29 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-from .api import SolarOfThingsAPI, AuthenticationError, TokenExpiredError
+from .api import AuthenticationError, SolarOfThingsAPI
 from .const import (
-    DOMAIN,
-    CONF_USER_ID,
-    CONF_PASSWORD,
-    CONF_IOT_TOKEN,
-    CONF_STATION_ID,
-    CONF_DEVICE_ID,
-    CONF_TIME_ZONE,
-    CONF_REFRESH_TOKEN,
     CONF_ACCESS_TOKEN_EXPIRES,
+    CONF_DEVICE_ID,
+    CONF_IOT_TOKEN,
+    CONF_PASSWORD,
+    CONF_REFRESH_TOKEN,
     CONF_REFRESH_TOKEN_EXPIRES,
+    CONF_STATION_ID,
+    CONF_TIME_ZONE,
+    CONF_USER_ID,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+DOCS_URL = "https://github.com/fufaeff/solar-of-things-ha"
 
 # ─── Validation helpers ────────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ── Step 1: choose auth mode ───────────────────────────────────────────────
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Offer choice of auth mode."""
         if user_input is not None:
             self._auth_mode = user_input.get("auth_mode", "password")
@@ -174,14 +175,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 }
             ),
-            description_placeholders={
-                "docs_url": "https://github.com/conexocasa/solar-of-things-ha"
-            },
+            errors={},
+            description_placeholders={"docs_url": DOCS_URL},
         )
 
     # ── Step 2a: user-id + password ────────────────────────────────────────────
 
-    async def async_step_password(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_password(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """User-ID + password setup step."""
         errors: dict[str, str] = {}
 
@@ -239,14 +239,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "docs_url": "https://github.com/conexocasa/solar-of-things-ha"
-            },
+            description_placeholders={"docs_url": DOCS_URL},
         )
 
     # ── Step 2b: legacy IOT token ─────────────────────────────────────────────
 
-    async def async_step_token(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_token(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Legacy IOT-token setup step."""
         errors: dict[str, str] = {}
 
@@ -289,16 +287,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "docs_url": "https://github.com/Hyllesen/solar-of-things-solar-usage"
-            },
+            description_placeholders={"docs_url": DOCS_URL},
         )
 
     # ── Step 2c: select station (when multiple discovered) ────────────────────
 
     async def async_step_select_station(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Step to select station when multiple stations are found."""
         errors: dict[str, str] = {}
 
@@ -336,29 +332,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ── Re-auth flow ───────────────────────────────────────────────────────────
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Triggered by the coordinator when TokenExpiredError is raised."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Ask the user to re-enter credentials or a fresh token."""
         errors: dict[str, str] = {}
-        existing_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        existing_user_id = (
-            existing_entry.data.get(CONF_USER_ID, "") if existing_entry else ""
-        )
+        existing_entry = self._get_reauth_entry()
+        existing_user_id = existing_entry.data.get(CONF_USER_ID, "")
 
         if user_input is not None:
             user_id = (
-                user_input.get(CONF_USER_ID)
-                or (existing_entry.data.get(CONF_USER_ID) if existing_entry else "")
-                or ""
+                user_input.get(CONF_USER_ID) or existing_entry.data.get(CONF_USER_ID) or ""
             ).strip()
             password = (
                 user_input.get(CONF_PASSWORD)
-                or (existing_entry.data.get(CONF_PASSWORD) if existing_entry else "")
+                or existing_entry.data.get(CONF_PASSWORD)
                 or ""
             ).strip()
             iot_token = (user_input.get(CONF_IOT_TOKEN) or "").strip()
@@ -366,7 +358,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if iot_token:
                 # Option A: User provided a fresh IOT Token
                 merged = {
-                    **(existing_entry.data if existing_entry else {}),
+                    **existing_entry.data,
                     CONF_IOT_TOKEN: iot_token,
                 }
                 try:
@@ -378,20 +370,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.warning("SolarOfThings re-auth token validation error: %s", err)
                     errors["base"] = "invalid_auth"
                 else:
-                    self.hass.config_entries.async_update_entry(
+                    return self.async_update_reload_and_abort(
                         existing_entry,
-                        data={
-                            **existing_entry.data,
-                            CONF_IOT_TOKEN: iot_token,
-                        },
+                        data_updates={CONF_IOT_TOKEN: iot_token},
                     )
-                    await self.hass.config_entries.async_reload(existing_entry.entry_id)
-                    return self.async_abort(reason="reauth_successful")
 
             elif user_id and password:
                 # Option B: Re-authenticate with User ID + Password
                 merged = {
-                    **(existing_entry.data if existing_entry else {}),
+                    **existing_entry.data,
                     CONF_USER_ID: user_id,
                     CONF_PASSWORD: password,
                 }
@@ -407,10 +394,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.exception("Unexpected exception during re-auth: %s", err)
                     errors["base"] = "unknown"
                 else:
-                    self.hass.config_entries.async_update_entry(
+                    return self.async_update_reload_and_abort(
                         existing_entry,
-                        data={
-                            **existing_entry.data,
+                        data_updates={
                             CONF_USER_ID: user_id,
                             CONF_PASSWORD: password,
                             CONF_IOT_TOKEN: info[CONF_IOT_TOKEN],
@@ -419,8 +405,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_REFRESH_TOKEN_EXPIRES: info[CONF_REFRESH_TOKEN_EXPIRES],
                         },
                     )
-                    await self.hass.config_entries.async_reload(existing_entry.entry_id)
-                    return self.async_abort(reason="reauth_successful")
             else:
                 errors["base"] = "invalid_auth"
 
@@ -449,18 +433,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return SolarOfThingsOptionsFlowHandler(config_entry)
+        return SolarOfThingsOptionsFlowHandler()
 
 
 class SolarOfThingsOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for Solar of Things."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage options, including updating credentials for automatic token renewal."""
         errors: dict[str, str] = {}
 
@@ -500,7 +481,16 @@ class SolarOfThingsOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_ACCESS_TOKEN_EXPIRES: info[CONF_ACCESS_TOKEN_EXPIRES],
                         CONF_REFRESH_TOKEN_EXPIRES: info[CONF_REFRESH_TOKEN_EXPIRES],
                     }
-                    self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+                    # Update data and options in one go so the entry is
+                    # reloaded only once (by the update listener).
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data=new_data,
+                        options={
+                            **self.config_entry.options,
+                            "update_interval": update_interval,
+                        },
+                    )
                     return self.async_create_entry(
                         title="",
                         data={"update_interval": update_interval},
