@@ -11,6 +11,18 @@
 - **Controls flipping back after a change**: a written value is shown right away and kept until
   the cloud settings cache reports it (up to 5 minutes), instead of reverting on the next poll.
 
+- **Backup Mode switch overwrote the output priority**: turning it off always wrote SUB, even
+  when the inverter had been in USB, and even when SBU was not active. It now restores the
+  priority that was active before SBU (kept across restarts, SUB if unknown) and does
+  nothing when SBU is not active.
+
+### Breaking
+- **`Grid Charging (AC Input Range)` switch replaced by the `AC Input Range` select**
+  (`Appliance (APL)` / `UPS`). The setting (`acInputRangeSetting`) is the AC input voltage
+  window, not grid charging; grid charging is controlled by `Charger Source Priority`.
+  The old `switch.*_grid_charging` entity is removed automatically; update automations and
+  dashboards that used it.
+
 ### Changed
 - New shared `entity.py`: one place builds `DeviceInfo` and performs setting writes for all
   platforms; entities no longer read the coordinator's private `_entry`.

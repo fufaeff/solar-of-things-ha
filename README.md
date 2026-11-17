@@ -80,7 +80,7 @@ The **Solar of Things** integration connects Home Assistant to the
 | 🔍 **Auto-discovery** | Enter Station ID → HA fetches all device IDs automatically |
 | 📊 **Real-time monitoring** | 10+ per-device sensors + dynamic attributes |
 | 📅 **Monthly statistics** | 4 station-level energy summary sensors |
-| 🎛️ **System control** | 35 control entities (17 numbers, 6 selects, 12 switches) |
+| 🎛️ **System control** | 35 control entities (17 numbers, 7 selects, 11 switches) |
 | ⚡ **Energy Dashboard** | All power and energy sensors are dashboard-ready |
 | 🏠 **Multi-station** | Unlimited stations via multiple config entries |
 | 🔒 **Secure auth** | User ID + Password login with automatic token refresh (no manual token copying) |
@@ -156,14 +156,14 @@ The **Solar of Things** integration connects Home Assistant to the
 | `{device} Output Frequency` | `50 Hz` · `60 Hz` | AC output frequency |
 | `{device} Output Voltage` | `220 V` · `230 V` · `240 V` | AC output voltage |
 | `{device} Grid Connection Type` | Safety grid protocol standards | Grid voltage & frequency safety regulation |
+| `{device} AC Input Range` | `Appliance (APL)` · `UPS` | AC input voltage window: APL is wide, UPS is narrow with faster switchover. Does not control grid charging (use Charger Source Priority) |
 
-### Switch Entities (12 switches)
+### Switch Entities (11 switches)
 
 | Entity | Description |
 |---|---|
-| `{device} Grid Charging` | AC Input Range (0 = Appliance mode, grid charging allowed; 1 = UPS bypass) |
 | `{device} Grid Feed-In` | Enable/disable exporting excess battery/solar power to utility |
-| `{device} Backup Mode` | Quick toggle to SBU priority mode |
+| `{device} Backup Mode` | Quick toggle to SBU priority mode; turning it off restores the previous output priority |
 | `{device} BMS Enabled` | Enable/disable BMS communication |
 | `{device} Equalization Enabled` | Enable/disable battery equalization mode |
 | `{device} LCD Backlight` | Inverter display backlight toggle |
@@ -309,7 +309,7 @@ You should see:
 - ☀️ Sensor entities (PV power, battery, grid, load)
 - 🔢 Number sliders (battery charge/discharge limits, grid charge limit)
 - 🔽 Select dropdowns (operating mode, battery priority)
-- 🔘 Switches (grid charging, grid feed-in, backup mode)
+- 🔘 Switches (grid feed-in, backup mode, BMS, buzzer, ECO mode and more)
 - 📊 Monthly energy summary sensors (if station ID is set)
 
 > Entities may show **Unknown** for the first 5 minutes while the coordinator
@@ -359,7 +359,7 @@ set of sensors and control entities.
 │  🎛️  Grid Charge Limit          ░░░░░░░░   0 W      │
 │  🔽  Operating Mode             Self-Use            │
 │  🔽  Battery Priority           Solar First         │
-│  🔘  Grid Charging              OFF                 │
+│  🔽  AC Input Range             Appliance (APL)     │
 │  🔘  Grid Feed-In               ON                  │
 │  🔘  Backup Mode                OFF                 │
 └─────────────────────────────────────────────────────┘
@@ -439,9 +439,11 @@ automation:
       - platform: time
         at: "22:00:00"
     action:
-      - service: switch.turn_on
+      - service: select.select_option
         target:
-          entity_id: switch.1_inverter_grid_charging
+          entity_id: select.1_inverter_charger_source_priority
+        data:
+          option: "Solar + Utility (SNU)"
 ```
 
 ### Switch to backup mode before a storm
@@ -551,8 +553,8 @@ entities:
   - entity: number.1_inverter_grid_charge_limit
     name: Grid Charge Limit
   - type: divider
-  - entity: switch.1_inverter_grid_charging
-    name: Grid Charging
+  - entity: select.1_inverter_ac_input_range
+    name: AC Input Range
   - entity: switch.1_inverter_grid_feed_in
     name: Grid Feed-In
   - entity: switch.1_inverter_backup_mode

@@ -228,6 +228,14 @@ OUTPUT_MODE_MAP: dict[str, int] = {
     # "Power Export Control (PEC)": 3,
 }
 OUTPUT_MODE_REVERSE: dict[int, str] = {v: k for k, v in OUTPUT_MODE_MAP.items()}
+OUTPUT_MODE_SBU = 2
+
+# AC input voltage range select (acInputRangeSetting)
+AC_INPUT_RANGE_MAP: dict[str, int] = {
+    "Appliance (APL)": 0,
+    "UPS": 1,
+}
+AC_INPUT_RANGE_REVERSE: dict[int, str] = {v: k for k, v in AC_INPUT_RANGE_MAP.items()}
 
 # Charger-priority select
 CHARGER_PRIORITY_MAP: dict[str, int] = {

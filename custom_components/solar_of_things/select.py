@@ -11,6 +11,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    AC_INPUT_RANGE_MAP,
+    AC_INPUT_RANGE_REVERSE,
     BATTERY_TYPE_MAP,
     BATTERY_TYPE_REVERSE,
     CHARGER_PRIORITY_MAP,
@@ -80,6 +82,9 @@ async def async_setup_entry(
                     api, coordinator, station_id, device_id, device_name
                 ),
                 SolarOfThingsGridConnectionTypeSelect(
+                    api, coordinator, station_id, device_id, device_name
+                ),
+                SolarOfThingsAcInputRangeSelect(
                     api, coordinator, station_id, device_id, device_name
                 ),
             ]
@@ -254,3 +259,31 @@ class SolarOfThingsGridConnectionTypeSelect(_BaseSelect):
         if val is None:
             return None
         return GRID_CONNECTION_PROTOCOL_TYPE_BY_VALUE.get(val)
+
+
+class SolarOfThingsAcInputRangeSelect(_BaseSelect):
+    """Select entity for AC Input Range (acInputRangeSetting).
+
+    Appliance (APL, 0) accepts a wide input voltage window; UPS (1) a narrow
+    one with faster switchover. This does not control grid charging; that is
+    the Charger Source Priority select.
+    """
+
+    _setting_key = "acInputRangeSetting"
+    _option_values = AC_INPUT_RANGE_MAP
+
+    def __init__(
+        self, api, coordinator, station_id: str, device_id: str, device_name: str
+    ) -> None:
+        super().__init__(api, coordinator, station_id, device_id, device_name)
+        self._attr_name = f"{device_name} AC Input Range"
+        self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_ac_input_range"
+        self._attr_options = list(AC_INPUT_RANGE_MAP)
+        self._attr_icon = "mdi:transmission-tower"
+
+    @property
+    def current_option(self) -> str | None:
+        val = self._get_setting_value(self._setting_key)
+        if val is None:
+            return None
+        return AC_INPUT_RANGE_REVERSE.get(val)
