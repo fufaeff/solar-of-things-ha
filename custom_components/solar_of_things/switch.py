@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from typing import NamedTuple
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -47,42 +49,19 @@ async def async_setup_entry(
 
         entities.extend(
             [
-                # Existing switches
                 SolarOfThingsGridFeedInSwitch(
                     api, coordinator, station_id, device_id, device_name
                 ),
                 SolarOfThingsBackupModeSwitch(
                     api, coordinator, station_id, device_id, device_name
                 ),
-                # New toggle switches from TOGGLE_SETTING_DEFINITIONS
-                SolarOfThingsBmsFunctionEnableSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsBatteryEqualizationModeEnableSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsBacklightOnSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsBuzzerOnSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsDisplayAutomaticallyReturnsToHomepageSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsEcoModeSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsInputSourceDetectionPromptSoundSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsOverTemperatureAutomaticRestartSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
-                SolarOfThingsOverloadToBypassOperationSwitch(
-                    api, coordinator, station_id, device_id, device_name
-                ),
             ]
+        )
+        entities.extend(
+            SolarOfThingsToggleSwitch(
+                api, coordinator, station_id, device_id, device_name, spec
+            )
+            for spec in TOGGLE_SWITCHES
         )
 
     async_add_entities(entities)
@@ -133,7 +112,7 @@ class SolarOfThingsGridFeedInSwitch(_BaseSwitch):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Grid Feed-In"
+        self._attr_translation_key = "grid_feed_in"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_grid_feed_in"
         self._attr_device_class = SwitchDeviceClass.SWITCH
         self._attr_icon = "mdi:transmission-tower-export"
@@ -170,7 +149,7 @@ class SolarOfThingsBackupModeSwitch(_BaseSwitch, RestoreEntity):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Backup Mode (SBU Priority)"
+        self._attr_translation_key = "backup_mode"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_backup_mode"
         self._attr_device_class = SwitchDeviceClass.SWITCH
         self._attr_icon = "mdi:shield-home"
@@ -228,8 +207,68 @@ class SolarOfThingsBackupModeSwitch(_BaseSwitch, RestoreEntity):
 # ─── Toggle switches (0=Off, 1=On pattern) ──────────────────────────────────────
 
 
-class _BaseToggleSwitch(_BaseSwitch):
-    """Base class for simple on/off toggle switches (value 0 or 1)."""
+class ToggleSpec(NamedTuple):
+    """A device setting exposed as a plain 0/1 switch."""
+
+    setting_key: str  # API setting key
+    key: str  # unique_id suffix and translation key
+    icon: str
+
+
+TOGGLE_SWITCHES: tuple[ToggleSpec, ...] = (
+    ToggleSpec(
+        "bmsFunctionEnableSetting",
+        "bms_function_enable",
+        "mdi:battery-lock",
+    ),
+    ToggleSpec(
+        "batteryEqualizationModeEnableSetting",
+        "equalization_mode_enable",
+        "mdi:battery-heart-outline",
+    ),
+    ToggleSpec(
+        "backlightOn",
+        "backlight_on",
+        "mdi:lightbulb",
+    ),
+    ToggleSpec(
+        "buzzerOn",
+        "buzzer_on",
+        "mdi:bell-alert",
+    ),
+    ToggleSpec(
+        "displayAutomaticallyReturnsToHomepage",
+        "display_auto_homepage",
+        "mdi:view-dashboard",
+    ),
+    ToggleSpec(
+        "ecoMode",
+        "eco_mode",
+        "mdi:leaf",
+    ),
+    ToggleSpec(
+        "inputSourceDetectionPromptSound",
+        "input_source_beep",
+        "mdi:volume-source",
+    ),
+    ToggleSpec(
+        "overTemperatureAutomaticRestart",
+        "overheat_restart",
+        "mdi:thermometer-alert",
+    ),
+    ToggleSpec(
+        "overloadToBypassOperation",
+        "overload_bypass",
+        "mdi:arrow-right-bold-hexagon-outline",
+    ),
+)
+
+
+class SolarOfThingsToggleSwitch(_BaseSwitch):
+    """On/off switch for a 0/1 device setting (device configuration)."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
         self,
@@ -238,15 +277,13 @@ class _BaseToggleSwitch(_BaseSwitch):
         station_id: str,
         device_id: str,
         device_name: str,
-        setting_key: str,
-        icon: str,
-        unique_id_suffix: str,
+        spec: ToggleSpec,
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._setting_key = setting_key
-        self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_{unique_id_suffix}"
-        self._attr_device_class = SwitchDeviceClass.SWITCH
-        self._attr_icon = icon
+        self._setting_key = spec.setting_key
+        self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_{spec.key}"
+        self._attr_translation_key = spec.key
+        self._attr_icon = spec.icon
 
     @property
     def is_on(self) -> bool | None:
@@ -260,174 +297,3 @@ class _BaseToggleSwitch(_BaseSwitch):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self._async_write_setting(self._setting_key, 0)
-
-
-class SolarOfThingsBmsFunctionEnableSwitch(_BaseToggleSwitch):
-    """Switch for BMS function enable (bmsFunctionEnableSetting)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="bmsFunctionEnableSetting",
-            icon="mdi:battery-lock",
-            unique_id_suffix="bms_function_enable",
-        )
-        self._attr_name = f"{device_name} BMS Enabled"
-
-
-class SolarOfThingsBatteryEqualizationModeEnableSwitch(_BaseToggleSwitch):
-    """Switch for equalization mode enable (batteryEqualizationModeEnableSetting)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="batteryEqualizationModeEnableSetting",
-            icon="mdi:battery-heart-outline",
-            unique_id_suffix="equalization_mode_enable",
-        )
-        self._attr_name = f"{device_name} Equalization Enabled"
-
-
-class SolarOfThingsBacklightOnSwitch(_BaseToggleSwitch):
-    """Switch for LCD backlight (backlightOn)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="backlightOn",
-            icon="mdi:lightbulb",
-            unique_id_suffix="backlight_on",
-        )
-        self._attr_name = f"{device_name} LCD Backlight"
-
-
-class SolarOfThingsBuzzerOnSwitch(_BaseToggleSwitch):
-    """Switch for buzzer (buzzerOn)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="buzzerOn",
-            icon="mdi:bell-alert",
-            unique_id_suffix="buzzer_on",
-        )
-        self._attr_name = f"{device_name} Buzzer"
-
-
-class SolarOfThingsDisplayAutomaticallyReturnsToHomepageSwitch(_BaseToggleSwitch):
-    """Switch for LCD auto return to homepage (displayAutomaticallyReturnsToHomepage)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="displayAutomaticallyReturnsToHomepage",
-            icon="mdi:view-dashboard",
-            unique_id_suffix="display_auto_homepage",
-        )
-        self._attr_name = f"{device_name} LCD Auto Homepage"
-
-
-class SolarOfThingsEcoModeSwitch(_BaseToggleSwitch):
-    """Switch for ECO mode (ecoMode)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="ecoMode",
-            icon="mdi:leaf",
-            unique_id_suffix="eco_mode",
-        )
-        self._attr_name = f"{device_name} ECO Mode"
-
-
-class SolarOfThingsInputSourceDetectionPromptSoundSwitch(_BaseToggleSwitch):
-    """Switch for input source change beep (inputSourceDetectionPromptSound)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="inputSourceDetectionPromptSound",
-            icon="mdi:volume-source",
-            unique_id_suffix="input_source_beep",
-        )
-        self._attr_name = f"{device_name} Input Source Change Beep"
-
-
-class SolarOfThingsOverTemperatureAutomaticRestartSwitch(_BaseToggleSwitch):
-    """Switch for overheat restart (overTemperatureAutomaticRestart)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="overTemperatureAutomaticRestart",
-            icon="mdi:thermometer-alert",
-            unique_id_suffix="overheat_restart",
-        )
-        self._attr_name = f"{device_name} Overheat Restart"
-
-
-class SolarOfThingsOverloadToBypassOperationSwitch(_BaseToggleSwitch):
-    """Switch for overload bypass (overloadToBypassOperation)."""
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(
-            api,
-            coordinator,
-            station_id,
-            device_id,
-            device_name,
-            setting_key="overloadToBypassOperation",
-            icon="mdi:arrow-right-bold-hexagon-outline",
-            unique_id_suffix="overload_bypass",
-        )
-        self._attr_name = f"{device_name} Overload Bypass"

@@ -6,6 +6,7 @@ import logging
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -130,7 +131,7 @@ class SolarOfThingsOperatingModeSelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Source Priority"
+        self._attr_translation_key = "operating_mode"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_operating_mode"
         self._attr_options = OUTPUT_MODES
         self._attr_icon = "mdi:cog"
@@ -156,7 +157,7 @@ class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Charger Source Priority"
+        self._attr_translation_key = "battery_priority"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_battery_priority"
         self._attr_options = CHARGER_PRIORITIES
         self._attr_icon = "mdi:battery-sync"
@@ -179,7 +180,8 @@ class SolarOfThingsBatteryTypeSelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery Type"
+        self._attr_translation_key = "battery_type"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_battery_type"
         self._attr_options = BATTERY_TYPES
         self._attr_icon = "mdi:battery"
@@ -202,7 +204,8 @@ class SolarOfThingsRatedFrequencySelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Frequency"
+        self._attr_translation_key = "rated_frequency"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_rated_frequency"
         self._attr_options = RATED_FREQUENCIES
         self._attr_icon = "mdi:waveform"
@@ -225,7 +228,8 @@ class SolarOfThingsRatedVoltageSelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Voltage"
+        self._attr_translation_key = "rated_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_rated_voltage"
         self._attr_options = RATED_VOLTAGES
         self._attr_icon = "mdi:sine-wave"
@@ -248,7 +252,8 @@ class SolarOfThingsGridConnectionTypeSelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Grid Connection Type"
+        self._attr_translation_key = "grid_connection_type"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_grid_connection_type"
         self._attr_options = GRID_CONNECTION_PROTOCOL_TYPES
         self._attr_icon = "mdi:transmission-tower"
@@ -276,7 +281,8 @@ class SolarOfThingsAcInputRangeSelect(_BaseSelect):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} AC Input Range"
+        self._attr_translation_key = "ac_input_range"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_ac_input_range"
         self._attr_options = list(AC_INPUT_RANGE_MAP)
         self._attr_icon = "mdi:transmission-tower"

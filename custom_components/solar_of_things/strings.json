@@ -75,46 +75,115 @@
     }
   },
   "entity": {
-    "number": {
-      "battery_charge_limit": {
-        "name": "Battery Charge Limit"
-      },
-      "battery_discharge_limit": {
-        "name": "Battery Discharge Limit"
-      },
-      "grid_charge_limit": {
-        "name": "Grid Charge Limit"
-      }
-    },
-    "select": {
-      "operating_mode": {
-        "name": "Operating Mode",
-        "state": {
-          "self_use": "Self-Use",
-          "time_of_use": "Time-of-Use",
-          "backup": "Backup",
-          "grid_tie": "Grid-Tie",
-          "off_grid": "Off-Grid"
-        }
-      },
-      "battery_priority": {
-        "name": "Battery Priority",
-        "state": {
-          "solar_first": "Solar First",
-          "battery_first": "Battery First",
-          "grid_first": "Grid First"
-        }
-      }
-    },
     "switch": {
-      "grid_charging": {
-        "name": "Grid Charging"
-      },
       "grid_feed_in": {
         "name": "Grid Feed-In"
       },
       "backup_mode": {
-        "name": "Backup Mode"
+        "name": "Backup Mode (SBU Priority)"
+      },
+      "bms_function_enable": {
+        "name": "BMS Enabled"
+      },
+      "equalization_mode_enable": {
+        "name": "Equalization Enabled"
+      },
+      "backlight_on": {
+        "name": "LCD Backlight"
+      },
+      "buzzer_on": {
+        "name": "Buzzer"
+      },
+      "display_auto_homepage": {
+        "name": "LCD Auto Homepage"
+      },
+      "eco_mode": {
+        "name": "ECO Mode"
+      },
+      "input_source_beep": {
+        "name": "Input Source Change Beep"
+      },
+      "overheat_restart": {
+        "name": "Overheat Restart"
+      },
+      "overload_bypass": {
+        "name": "Overload Bypass"
+      }
+    },
+    "number": {
+      "maximum_total_charging_current": {
+        "name": "Maximum Total Charging Current"
+      },
+      "max_utility_charge_current": {
+        "name": "Max Utility Charge Current"
+      },
+      "bms_lock_machine_battery_capacity": {
+        "name": "BMS Inverter Cutoff"
+      },
+      "battery_constant_charging_voltage": {
+        "name": "Bulk Voltage"
+      },
+      "battery_equalization_interval": {
+        "name": "Equalization Interval"
+      },
+      "battery_equalization_time": {
+        "name": "Equalization Time"
+      },
+      "battery_equalization_timeout": {
+        "name": "Equalization Timeout"
+      },
+      "battery_equalization_voltage": {
+        "name": "Equalization Voltage"
+      },
+      "battery_float_charging_voltage": {
+        "name": "Float Voltage"
+      },
+      "battery_recharge_voltage": {
+        "name": "SBU Utility Takeover"
+      },
+      "battery_redischarge_voltage": {
+        "name": "SBU Battery Takeover"
+      },
+      "ct_zero_power": {
+        "name": "Main Input Power"
+      },
+      "discharge_current_limit": {
+        "name": "Maximum Battery Discharge Current"
+      },
+      "inverter_startup_battery_capacity": {
+        "name": "Battery Startup SOC"
+      },
+      "low_battery_alarm_voltage": {
+        "name": "Battery Low Alarm"
+      },
+      "restore_battery_discharging_capacity": {
+        "name": "Battery DC Takeover"
+      },
+      "restore_mains_charging_capacity": {
+        "name": "Battery Mains Charging Takeover"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "name": "Output Source Priority"
+      },
+      "battery_priority": {
+        "name": "Charger Source Priority"
+      },
+      "battery_type": {
+        "name": "Battery Type"
+      },
+      "rated_frequency": {
+        "name": "Output Frequency"
+      },
+      "rated_voltage": {
+        "name": "Output Voltage"
+      },
+      "grid_connection_type": {
+        "name": "Grid Connection Type"
+      },
+      "ac_input_range": {
+        "name": "AC Input Range"
       }
     }
   }

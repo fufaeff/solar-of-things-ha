@@ -72,8 +72,13 @@ def inverter_device_info(
 
 
 class SolarOfThingsDeviceEntity(CoordinatorEntity):
-    """Base for inverter entities that read and write device settings."""
+    """Base for inverter entities that read and write device settings.
 
+    Names come from translations (entity.<platform>.<translation_key>.name);
+    HA prefixes them with the device name.
+    """
+
+    _attr_has_entity_name = True
     coordinator: SolarOfThingsDeviceCoordinator
 
     def __init__(

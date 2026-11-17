@@ -180,7 +180,7 @@ The **Solar of Things** integration connects Home Assistant to the
 
 | Requirement | Details |
 |---|---|
-| Home Assistant | 2023.1 or newer |
+| Home Assistant | 2023.4 or newer |
 | Siseli account | Active account at [solar.siseli.com](https://solar.siseli.com) |
 | IOT-Token | Retrieved from browser DevTools (see [Configuration](#configuration)) |
 | Station ID | 18-digit ID from the Siseli portal |

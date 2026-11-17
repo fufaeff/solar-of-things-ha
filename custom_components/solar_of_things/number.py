@@ -11,6 +11,7 @@ from homeassistant.components.number import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfPower,
     UnitOfTime,
@@ -18,7 +19,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, NUMBER_SETTING_DEFINITIONS
+from .const import DOMAIN
 from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,14 +47,12 @@ async def async_setup_entry(
 
         entities.extend(
             [
-                # Existing number entities
                 SolarOfThingsMaximumTotalChargingCurrentNumber(
                     api, coordinator, station_id, device_id, device_name
                 ),
                 SolarOfThingsMaxUtilityChargeCurrentNumber(
                     api, coordinator, station_id, device_id, device_name
                 ),
-                # New number entities from NUMBER_SETTING_DEFINITIONS
                 SolarOfThingsBmsLockMachineBatteryCapacityNumber(
                     api, coordinator, station_id, device_id, device_name
                 ),
@@ -142,7 +141,7 @@ class SolarOfThingsMaximumTotalChargingCurrentNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Maximum Total Charging Current"
+        self._attr_translation_key = "maximum_total_charging_current"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_maximum_total_charging_current"
         )
@@ -162,7 +161,7 @@ class SolarOfThingsMaxUtilityChargeCurrentNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Max Utility Charge Current"
+        self._attr_translation_key = "max_utility_charge_current"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_max_utility_charge_current"
         )
@@ -182,7 +181,8 @@ class SolarOfThingsBmsLockMachineBatteryCapacityNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} BMS Inverter Cutoff"
+        self._attr_translation_key = "bms_lock_machine_battery_capacity"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_bms_lock_machine_battery_capacity"
         )
@@ -202,7 +202,8 @@ class SolarOfThingsBatteryConstantChargingVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Bulk Voltage"
+        self._attr_translation_key = "battery_constant_charging_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_constant_charging_voltage"
         )
@@ -222,7 +223,8 @@ class SolarOfThingsBatteryEqualizationIntervalNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Equalization Interval"
+        self._attr_translation_key = "battery_equalization_interval"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_equalization_interval"
         )
@@ -241,7 +243,8 @@ class SolarOfThingsBatteryEqualizationTimeNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Equalization Time"
+        self._attr_translation_key = "battery_equalization_time"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_equalization_time"
         )
@@ -260,7 +263,8 @@ class SolarOfThingsBatteryEqualizationTimeoutNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Equalization Timeout"
+        self._attr_translation_key = "battery_equalization_timeout"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_equalization_timeout"
         )
@@ -280,7 +284,8 @@ class SolarOfThingsBatteryEqualizationVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Equalization Voltage"
+        self._attr_translation_key = "battery_equalization_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_equalization_voltage"
         )
@@ -301,7 +306,8 @@ class SolarOfThingsBatteryFloatChargingVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Float Voltage"
+        self._attr_translation_key = "battery_float_charging_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_float_charging_voltage"
         )
@@ -322,7 +328,7 @@ class SolarOfThingsBatteryRechargeVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} SBU Utility Takeover"
+        self._attr_translation_key = "battery_recharge_voltage"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_recharge_voltage"
         )
@@ -343,7 +349,7 @@ class SolarOfThingsBatteryRedischargeVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} SBU Battery Takeover"
+        self._attr_translation_key = "battery_redischarge_voltage"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_battery_redischarge_voltage"
         )
@@ -364,7 +370,8 @@ class SolarOfThingsCtZeroPowerNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Main Input Power"
+        self._attr_translation_key = "ct_zero_power"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_ct_zero_power"
         self._attr_native_min_value = 0.01
         self._attr_native_max_value = 0.5
@@ -381,7 +388,7 @@ class SolarOfThingsDischargeCurrentLimitNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Maximum Battery Discharge Current"
+        self._attr_translation_key = "discharge_current_limit"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_discharge_current_limit"
         )
@@ -401,7 +408,7 @@ class SolarOfThingsInverterStartupBatteryCapacityNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery Startup SOC"
+        self._attr_translation_key = "inverter_startup_battery_capacity"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_inverter_startup_battery_capacity"
         )
@@ -421,7 +428,8 @@ class SolarOfThingsLowBatteryAlarmVoltageNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery Low Alarm"
+        self._attr_translation_key = "low_battery_alarm_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_low_battery_alarm_voltage"
         )
@@ -441,7 +449,7 @@ class SolarOfThingsRestoreBatteryDischargingCapacityNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery DC Takeover"
+        self._attr_translation_key = "restore_battery_discharging_capacity"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_restore_battery_discharging_capacity"
         )
@@ -460,7 +468,7 @@ class SolarOfThingsRestoreMainsChargingCapacityNumber(_BaseNumber):
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery Mains Charging Takeover"
+        self._attr_translation_key = "restore_mains_charging_capacity"
         self._attr_unique_id = (
             f"{DOMAIN}_{station_id}_{device_id}_restore_mains_charging_capacity"
         )

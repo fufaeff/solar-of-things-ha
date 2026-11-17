@@ -70,6 +70,7 @@ jobs:
             custom_components/solar_of_things/api.py \
             custom_components/solar_of_things/config_flow.py \
             custom_components/solar_of_things/const.py \
+            custom_components/solar_of_things/entity.py \
             custom_components/solar_of_things/sensor.py \
             custom_components/solar_of_things/number.py \
             custom_components/solar_of_things/select.py \

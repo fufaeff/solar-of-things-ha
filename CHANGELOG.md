@@ -24,6 +24,19 @@
   dashboards that used it.
 
 ### Changed
+- **Translated control names**: switches, numbers and selects use `has_entity_name` with
+  translation keys; names are now localized (English and Russian). Entity IDs are unchanged.
+  Requires Home Assistant 2023.4 or newer (minimum raised from 2023.1).
+- **Entity categories**: device-configuration controls (display, buzzer, protection toggles,
+  battery profile voltages and equalization, battery type, output frequency/voltage, grid
+  connection type, AC input range) are marked as configuration entities and no longer appear
+  on auto-generated dashboards.
+- The nine 0/1 toggle switches are built from one table (`TOGGLE_SWITCHES`) instead of nine
+  copy-pasted classes; Backup Mode got its own icon (it shared BMS Enabled's).
+- Removed dead code: 36 unused `set_*` helpers and `update_device_settings` in `api.py`, the
+  unused and outdated `NUMBER_SETTING_DEFINITIONS` / `TOGGLE_SETTING_DEFINITIONS` in `const.py`,
+  and stale entity translation keys that matched no entity.
+- CI syntax check now includes `entity.py`.
 - New shared `entity.py`: one place builds `DeviceInfo` and performs setting writes for all
   platforms; entities no longer read the coordinator's private `_entry`.
 - `api.py`: `_write_setting` is now public `write_setting`; the cloud rejecting a value raises
