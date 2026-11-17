@@ -100,6 +100,7 @@ from .const import (
     GRID_CONNECTION_PROTOCOL_TYPE_MAP,
     IOT_APP_ID,
     IOT_APP_SECRET_ENC,
+    MONTHLY_SUMMARY_KEYS,
     OUTPUT_MODE_MAP,
     RATED_FREQUENCY_MAP,
     RATED_VOLTAGE_MAP,
@@ -145,6 +146,43 @@ def _is_token_invalid_code(code: Any) -> bool:
         return int(code) in TOKEN_INVALID_CODES
     except (TypeError, ValueError):
         return False
+
+
+def _parse_monthly_properties(payload: dict[str, Any], month_key: str) -> dict[str, float]:
+    """Extract per-property values for one month from a yearly summary payload.
+
+    Response shape::
+
+        {"properties": [
+            {"property": {"key": "pvGeneratedEnergy", ...},
+             "timePoints": [{"time": "2026-11", "value": 201.06,
+                             "isRealValue": true}, ...]},
+            ...]}
+
+    A property that is present but has no real value for the month is 0.0;
+    properties absent from the response are left out (sensor → unknown).
+    """
+    values: dict[str, float] = {}
+    properties = payload.get("properties")
+    if not isinstance(properties, list):
+        return values
+
+    for prop in properties:
+        if not isinstance(prop, dict):
+            continue
+        key = (prop.get("property") or {}).get("key")
+        if not key:
+            continue
+        value = 0.0
+        for point in prop.get("timePoints") or []:
+            if point.get("time") == month_key and point.get("isRealValue", True):
+                try:
+                    value = float(point.get("value") or 0)
+                except (TypeError, ValueError):
+                    value = 0.0
+                break
+        values[key] = value
+    return values
 
 
 def _is_auth_failure(resp: requests.Response) -> bool:
@@ -333,7 +371,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.5.0 "
+                    "HomeAssistant-SolarOfThings/2.5.1 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -903,41 +941,27 @@ class SolarOfThingsAPI:
                 f"message={data.get('message')}"
             )
 
-        props = (
-            ((data.get("data") or {}).get("properties"))
-            or (data.get("data") or {}).get("list")
-            or []
+        values = _parse_monthly_properties(data.get("data") or {}, month_key)
+        _LOGGER.debug(
+            "SolarOfThings station %s: monthly summary %s → %s",
+            station_id,
+            month_key,
+            values,
         )
 
-        result: dict[str, Any] = {}
-        for item in props if isinstance(props, list) else []:
-            k = item.get("key") or item.get("name")
-            v = item.get("value")
-            if k and v is not None:
-                result[k] = v
+        monthly: dict[str, Any] = {
+            sensor_key: values.get(api_key)
+            for sensor_key, api_key in MONTHLY_SUMMARY_KEYS.items()
+        }
 
-        # Extract monthly totals (fallback: look for known keys)
-        monthly: dict[str, Any] = {}
-        pv_total = (
-            result.get(month_key) or result.get("pvTotal") or result.get("pv") or 0
-        )
-        monthly["monthly_pv_generated"] = float(pv_total or 0)
-
-        grid_import = result.get("gridImport") or result.get("buy") or 0
-        monthly["monthly_grid_import"] = float(grid_import or 0)
-
-        total_consumption = result.get("totalConsumption") or result.get("load") or 0
-        monthly["monthly_total_consumption"] = float(total_consumption or 0)
-
-        if monthly["monthly_total_consumption"] > 0:
-            monthly["monthly_solar_percentage"] = round(
-                100.0
-                * monthly["monthly_pv_generated"]
-                / monthly["monthly_total_consumption"],
-                1,
-            )
+        # Share of consumption not bought from the grid (solar direct + battery).
+        consumption = monthly.get("monthly_total_consumption")
+        grid_import = monthly.get("monthly_grid_import")
+        if consumption and grid_import is not None:
+            coverage = 100.0 * (consumption - grid_import) / consumption
+            monthly["monthly_solar_percentage"] = round(min(max(coverage, 0.0), 100.0), 1)
         else:
-            monthly["monthly_solar_percentage"] = 0.0
+            monthly["monthly_solar_percentage"] = None
 
         return monthly
 

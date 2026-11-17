@@ -439,7 +439,9 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
         if unit == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-            self._attr_state_class = SensorStateClass.TOTAL
+            # Monthly counters drop to 0 at the start of each month; with
+            # TOTAL_INCREASING the recorder treats that drop as a meter reset.
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         elif unit == "%":
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_state_class = SensorStateClass.MEASUREMENT

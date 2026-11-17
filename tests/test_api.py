@@ -20,6 +20,7 @@ from custom_components.solar_of_things.const import (
     API_DEVICE_LIST,
     API_LATEST_STATE,
     API_LOGIN,
+    API_MONTHLY_SUMMARY,
     API_REFRESH_TOKEN,
     API_SETTINGS_SET,
     API_TIME_SERIES,
@@ -28,6 +29,7 @@ from custom_components.solar_of_things.const import (
 )
 
 LOGIN_URL = f"{API_BASE_URL}{API_LOGIN}"
+MONTHLY_URL = f"{API_BASE_URL}{API_MONTHLY_SUMMARY}"
 REFRESH_URL = f"{API_BASE_URL}{API_REFRESH_TOKEN}"
 DEVICE_LIST_URL = f"{API_BASE_URL}{API_DEVICE_LIST}"
 LATEST_STATE_URL = f"{API_BASE_URL}{API_LATEST_STATE}"
@@ -307,3 +309,78 @@ def test_write_setting_error_code_raises(requests_mock) -> None:
 
     with pytest.raises(RuntimeError):
         api.set_eco_mode("dev", False)
+
+
+# ─── Monthly summary ───────────────────────────────────────────────────────────
+
+
+def _monthly_property(key: str, points: dict[str, float], real: bool = True) -> dict:
+    return {
+        "property": {"key": key, "name": key},
+        "timePoints": [
+            {"time": time, "value": value, "isRealValue": real} for time, value in points.items()
+        ],
+    }
+
+
+def test_fetch_monthly_summary_parses_current_month(requests_mock) -> None:
+    requests_mock.post(
+        MONTHLY_URL,
+        json={
+            "code": 0,
+            "data": {
+                "properties": [
+                    _monthly_property("pvGeneratedEnergy", {"2026-10": 300.0, "2026-11": 201.06}),
+                    _monthly_property("consumeElectricityQuantity", {"2026-11": 250.0}),
+                    _monthly_property("buyElectricityQuantity", {"2026-11": 50.0}),
+                    _monthly_property("sellElectricityQuantity", {"2026-11": 5.5}),
+                    _monthly_property("chargeElectricityQuantity", {"2026-11": 80.0}),
+                    _monthly_property("dischargeElectricityQuantity", {"2026-11": 70.0}, real=False),
+                ]
+            },
+        },
+    )
+    api = SolarOfThingsAPI(iot_token="t", time_zone="UTC")
+
+    with patch.object(
+        SolarOfThingsAPI,
+        "_now",
+        return_value=datetime(2026, 11, 17, 12, tzinfo=UTC),
+    ):
+        monthly = api.fetch_monthly_summary("st1")
+
+    request = requests_mock.request_history[0]
+    assert request.json() == {"time": "2026"}
+    assert request.qs["summarycategorykey"] == ["pvinverterelectricityquantityclass"]
+    assert monthly == {
+        "monthly_pv_generated": 201.06,
+        "monthly_total_consumption": 250.0,
+        "monthly_grid_import": 50.0,
+        "monthly_grid_export": 5.5,
+        "monthly_battery_charge": 80.0,
+        "monthly_battery_discharge": 0.0,  # isRealValue == False
+        "monthly_solar_percentage": 80.0,  # (250 - 50) / 250
+    }
+
+
+def test_fetch_monthly_summary_missing_properties_are_unknown(requests_mock) -> None:
+    requests_mock.post(
+        MONTHLY_URL,
+        json={
+            "code": 0,
+            "data": {"properties": [_monthly_property("pvGeneratedEnergy", {"2026-01": 1.0})]},
+        },
+    )
+    api = SolarOfThingsAPI(iot_token="t", time_zone="UTC")
+
+    with patch.object(
+        SolarOfThingsAPI,
+        "_now",
+        return_value=datetime(2026, 11, 17, 12, tzinfo=UTC),
+    ):
+        monthly = api.fetch_monthly_summary("st1")
+
+    assert monthly["monthly_pv_generated"] == 0.0  # present, no value this month
+    assert monthly["monthly_grid_import"] is None
+    assert monthly["monthly_total_consumption"] is None
+    assert monthly["monthly_solar_percentage"] is None

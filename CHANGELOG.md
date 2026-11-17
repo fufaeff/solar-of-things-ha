@@ -1,3 +1,13 @@
+## [2.5.1] - 2026-11-17
+
+### Fixed
+- **Monthly sensors always 0**: the yearly station summary is now parsed in its real shape (`data.properties[].property.key` + `timePoints[]` with `time == "YYYY-MM"`). Monthly PV Generated, Total Consumption and Grid Import now come from `pvGeneratedEnergy`, `consumeElectricityQuantity` and `buyElectricityQuantity`. Values missing from the response are reported as unknown instead of 0.
+- **Monthly Solar Coverage** is now the share of consumption not bought from the grid: `(consumption − grid import) / consumption`, limited to 0–100 %.
+- Monthly energy sensors use `state_class: total_increasing`, so the reset at the start of a month is not recorded as negative energy.
+
+### Added
+- Monthly Grid Export, Monthly Battery Charge and Monthly Battery Discharge sensors (`sellElectricityQuantity`, `chargeElectricityQuantity`, `dischargeElectricityQuantity`).
+
 ## [2.5.0] - 2026-11-17
 
 ### Fixed

@@ -234,6 +234,35 @@ SENSOR_DEFINITIONS = {
         "unit": "%",
         "icon": "mdi:percent",
     },
+    "monthly_grid_export": {
+        "name": "Monthly Grid Export",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:transmission-tower-export",
+    },
+    "monthly_battery_charge": {
+        "name": "Monthly Battery Charge",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:battery-arrow-up",
+    },
+    "monthly_battery_discharge": {
+        "name": "Monthly Battery Discharge",
+        "unit": "kWh",
+        "device_class": "energy",
+        "icon": "mdi:battery-arrow-down",
+    },
+}
+
+# Monthly sensor key → property key in the yearly station summary response
+# (/stationOverView/stateAttributeSummary/category/yearly).
+MONTHLY_SUMMARY_KEYS = {
+    "monthly_pv_generated": "pvGeneratedEnergy",
+    "monthly_total_consumption": "consumeElectricityQuantity",
+    "monthly_grid_import": "buyElectricityQuantity",
+    "monthly_grid_export": "sellElectricityQuantity",
+    "monthly_battery_charge": "chargeElectricityQuantity",
+    "monthly_battery_discharge": "dischargeElectricityQuantity",
 }
 
 # Operating-mode select maps HA option strings to integer values
