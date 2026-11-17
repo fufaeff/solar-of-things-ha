@@ -6,10 +6,10 @@ import logging
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     BATTERY_TYPE_REVERSE,
@@ -77,21 +77,19 @@ async def async_setup_entry(
                 SolarOfThingsGridConnectionTypeSelect(
                     api, coordinator, station_id, device_id, device_name
                 ),
+                SolarOfThingsAcInputRangeSelect(
+                    api, coordinator, station_id, device_id, device_name
+                ),
             ]
         )
 
     async_add_entities(entities)
 
 
-class _BaseSelect(CoordinatorEntity, SelectEntity):
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(coordinator)
-        self._api = api
-        self._station_id = station_id
-        self._device_id = device_id
-        self._device_name = device_name
+class _BaseSelect(SolarOfThingsDeviceEntity, SelectEntity):
+    # Setting key written on selection and the option label -> raw value map
+    _setting_key: str
+    _option_values: dict[str, int]
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -118,11 +116,14 @@ class SolarOfThingsOperatingModeSelect(_BaseSelect):
     Reflects the real device API key.  Values 0/1/2 map to USB/SUB/SBU.
     """
 
+    _setting_key = "outputSourcePrioritySetting"
+    _option_values = OUTPUT_MODE_MAP
+
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Source Priority"
+        self._attr_translation_key = "operating_mode"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_operating_mode"
         self._attr_options = OUTPUT_MODES
         self._attr_icon = "mdi:cog"
@@ -134,12 +135,6 @@ class SolarOfThingsOperatingModeSelect(_BaseSelect):
             return None
         return OUTPUT_MODE_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_operating_mode, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
     """Select entity for Charger Source Priority (chargerSourcePrioritySetting).
@@ -147,11 +142,14 @@ class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
     Reflects the real device API key.  Values 0/1/2 map to CSO/SNU/OSO.
     """
 
+    _setting_key = "chargerSourcePrioritySetting"
+    _option_values = CHARGER_PRIORITY_MAP
+
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Charger Source Priority"
+        self._attr_translation_key = "battery_priority"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_battery_priority"
         self._attr_options = CHARGER_PRIORITIES
         self._attr_icon = "mdi:battery-sync"
@@ -163,21 +161,19 @@ class SolarOfThingsBatteryPrioritySelect(_BaseSelect):
             return None
         return CHARGER_PRIORITY_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_priority, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsBatteryTypeSelect(_BaseSelect):
     """Select entity for Battery Type (batteryTypeSetting)."""
+
+    _setting_key = "batteryTypeSetting"
+    _option_values = BATTERY_TYPE_MAP
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Battery Type"
+        self._attr_translation_key = "battery_type"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_battery_type"
         self._attr_options = BATTERY_TYPES
         self._attr_icon = "mdi:battery"
@@ -189,21 +185,19 @@ class SolarOfThingsBatteryTypeSelect(_BaseSelect):
             return None
         return BATTERY_TYPE_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_battery_type, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsRatedFrequencySelect(_BaseSelect):
     """Select entity for Output Frequency (ratedFrequencySetting)."""
+
+    _setting_key = "ratedFrequencySetting"
+    _option_values = RATED_FREQUENCY_MAP
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Frequency"
+        self._attr_translation_key = "rated_frequency"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_rated_frequency"
         self._attr_options = RATED_FREQUENCIES
         self._attr_icon = "mdi:waveform"
@@ -215,21 +209,19 @@ class SolarOfThingsRatedFrequencySelect(_BaseSelect):
             return None
         return RATED_FREQUENCY_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_rated_frequency, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsRatedVoltageSelect(_BaseSelect):
     """Select entity for Output Voltage (ratedVoltageSetting)."""
+
+    _setting_key = "ratedVoltageSetting"
+    _option_values = RATED_VOLTAGE_MAP
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Output Voltage"
+        self._attr_translation_key = "rated_voltage"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_rated_voltage"
         self._attr_options = RATED_VOLTAGES
         self._attr_icon = "mdi:sine-wave"
@@ -241,21 +233,19 @@ class SolarOfThingsRatedVoltageSelect(_BaseSelect):
             return None
         return RATED_VOLTAGE_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_rated_voltage, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
-
 
 class SolarOfThingsGridConnectionTypeSelect(_BaseSelect):
     """Select entity for Grid Connection Type (gridConnectionProtocolTypeSetting)."""
+
+    _setting_key = "gridConnectionProtocolTypeSetting"
+    _option_values = GRID_CONNECTION_PROTOCOL_TYPE_MAP
 
     def __init__(
         self, api, coordinator, station_id: str, device_id: str, device_name: str
     ) -> None:
         super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Grid Connection Type"
+        self._attr_translation_key = "grid_connection_type"
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_grid_connection_type"
         self._attr_options = GRID_CONNECTION_PROTOCOL_TYPES
         self._attr_icon = "mdi:transmission-tower"
@@ -267,8 +257,31 @@ class SolarOfThingsGridConnectionTypeSelect(_BaseSelect):
             return None
         return GRID_CONNECTION_PROTOCOL_TYPE_BY_VALUE.get(val)
 
-    async def async_select_option(self, option: str) -> None:
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_connection_protocol_type, self._device_id, option
-        )
-        await self.coordinator.async_request_refresh()
+
+class SolarOfThingsAcInputRangeSelect(_BaseSelect):
+    """Select entity for AC Input Range (acInputRangeSetting).
+
+    Appliance (APL, 0) accepts a wide input voltage window; UPS (1) a narrow
+    one with faster switchover. This does not control grid charging; that is
+    the Charger Source Priority select.
+    """
+
+    _setting_key = "acInputRangeSetting"
+    _option_values = AC_INPUT_RANGE_MAP
+
+    def __init__(
+        self, api, coordinator, station_id: str, device_id: str, device_name: str
+    ) -> None:
+        super().__init__(api, coordinator, station_id, device_id, device_name)
+        self._attr_translation_key = "ac_input_range"
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_ac_input_range"
+        self._attr_options = list(AC_INPUT_RANGE_MAP)
+        self._attr_icon = "mdi:transmission-tower"
+
+    @property
+    def current_option(self) -> str | None:
+        val = self._get_setting_value(self._setting_key)
+        if val is None:
+            return None
+        return AC_INPUT_RANGE_REVERSE.get(val)

@@ -143,6 +143,9 @@ class SolarOfThingsDeviceSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_name = f"{device_name} {sensor_definition['name']}"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_{sensor_key}"
+        self._attr_device_info = inverter_device_info(
+            coordinator, station_id, device_id, device_name
+        )
         self._attr_icon = sensor_definition.get("icon")
 
         unit_raw = str(sensor_definition.get("unit") or "").strip()
@@ -433,6 +436,7 @@ class SolarOfThingsStationMonthlySensor(CoordinatorEntity, SensorEntity):
 
         self._attr_name = f"Station {station_id} {sensor_definition['name']}"
         self._attr_unique_id = f"{DOMAIN}_{station_id}_{sensor_key}"
+        self._attr_device_info = station_device_info(station_id)
         self._attr_icon = sensor_definition.get("icon")
 
         unit = sensor_definition.get("unit")

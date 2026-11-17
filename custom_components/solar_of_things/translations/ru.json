@@ -73,5 +73,118 @@
       "invalid_auth": "Неверный User ID или пароль.",
       "unknown": "Непредвиденная ошибка."
     }
+  },
+  "entity": {
+    "switch": {
+      "grid_feed_in": {
+        "name": "Отдача в сеть"
+      },
+      "backup_mode": {
+        "name": "Резервный режим (приоритет SBU)"
+      },
+      "bms_function_enable": {
+        "name": "BMS включена"
+      },
+      "equalization_mode_enable": {
+        "name": "Выравнивающий заряд"
+      },
+      "backlight_on": {
+        "name": "Подсветка дисплея"
+      },
+      "buzzer_on": {
+        "name": "Зуммер"
+      },
+      "display_auto_homepage": {
+        "name": "Автовозврат дисплея на главный экран"
+      },
+      "eco_mode": {
+        "name": "Режим ECO"
+      },
+      "input_source_beep": {
+        "name": "Сигнал смены источника питания"
+      },
+      "overheat_restart": {
+        "name": "Перезапуск после перегрева"
+      },
+      "overload_bypass": {
+        "name": "Байпас при перегрузке"
+      }
+    },
+    "number": {
+      "maximum_total_charging_current": {
+        "name": "Максимальный общий ток заряда"
+      },
+      "max_utility_charge_current": {
+        "name": "Максимальный ток заряда от сети"
+      },
+      "bms_lock_machine_battery_capacity": {
+        "name": "Отключение инвертора по SOC (BMS)"
+      },
+      "battery_constant_charging_voltage": {
+        "name": "Напряжение основного заряда (Bulk)"
+      },
+      "battery_equalization_interval": {
+        "name": "Интервал выравнивающего заряда"
+      },
+      "battery_equalization_time": {
+        "name": "Длительность выравнивающего заряда"
+      },
+      "battery_equalization_timeout": {
+        "name": "Тайм-аут выравнивающего заряда"
+      },
+      "battery_equalization_voltage": {
+        "name": "Напряжение выравнивающего заряда"
+      },
+      "battery_float_charging_voltage": {
+        "name": "Напряжение поддерживающего заряда (Float)"
+      },
+      "battery_recharge_voltage": {
+        "name": "SBU: переход на сеть"
+      },
+      "battery_redischarge_voltage": {
+        "name": "SBU: возврат на батарею"
+      },
+      "ct_zero_power": {
+        "name": "Мощность на входе сети"
+      },
+      "discharge_current_limit": {
+        "name": "Максимальный ток разряда батареи"
+      },
+      "inverter_startup_battery_capacity": {
+        "name": "SOC запуска инвертора"
+      },
+      "low_battery_alarm_voltage": {
+        "name": "Сигнал низкого напряжения батареи"
+      },
+      "restore_battery_discharging_capacity": {
+        "name": "Возврат на батарею по SOC"
+      },
+      "restore_mains_charging_capacity": {
+        "name": "Переход на заряд от сети по SOC"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "name": "Приоритет источника питания нагрузки"
+      },
+      "battery_priority": {
+        "name": "Приоритет источника заряда"
+      },
+      "battery_type": {
+        "name": "Тип батареи"
+      },
+      "rated_frequency": {
+        "name": "Выходная частота"
+      },
+      "rated_voltage": {
+        "name": "Выходное напряжение"
+      },
+      "grid_connection_type": {
+        "name": "Тип подключения к сети"
+      },
+      "ac_input_range": {
+        "name": "Диапазон входа AC"
+      }
+    }
   }
 }
