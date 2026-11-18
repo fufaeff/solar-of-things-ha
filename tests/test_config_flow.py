@@ -19,6 +19,21 @@ async def test_form_user_step(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
 
+async def test_credential_forms_provide_portal_url(hass: HomeAssistant) -> None:
+    """The portal URL is a description placeholder (hassfest forbids URLs in strings)."""
+    for mode in ("password", "token"):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"auth_mode": mode}
+        )
+        assert result["step_id"] == mode
+        assert result["description_placeholders"]["portal_url"] == (
+            "https://solar.siseli.com"
+        )
+
+
 async def test_form_token_cannot_connect(hass: HomeAssistant) -> None:
     """Test token auth mode handles cannot connect error."""
     result = await hass.config_entries.flow.async_init(

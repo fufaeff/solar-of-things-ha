@@ -39,6 +39,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 DOCS_URL = "https://github.com/fufaeff/solar-of-things-ha"
+PORTAL_URL = "https://solar.siseli.com"
 
 # ─── Validation helpers ────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={"docs_url": DOCS_URL},
+            description_placeholders={"docs_url": DOCS_URL, "portal_url": PORTAL_URL},
         )
 
     # ── Step 2b: legacy IOT token ─────────────────────────────────────────────
@@ -287,7 +288,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={"docs_url": DOCS_URL},
+            description_placeholders={"docs_url": DOCS_URL, "portal_url": PORTAL_URL},
         )
 
     # ── Step 2c: select station (when multiple discovered) ────────────────────
