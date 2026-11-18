@@ -8,19 +8,27 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    AC_INPUT_RANGE_MAP,
+    AC_INPUT_RANGE_REVERSE,
+    BATTERY_TYPE_MAP,
     BATTERY_TYPE_REVERSE,
+    CHARGER_PRIORITY_MAP,
     CHARGER_PRIORITY_REVERSE,
     DOMAIN,
+    GRID_CONNECTION_PROTOCOL_TYPE_MAP,
     GRID_CONNECTION_PROTOCOL_TYPE_REVERSE,
+    OUTPUT_MODE_MAP,
     OUTPUT_MODE_REVERSE,
+    RATED_FREQUENCY_MAP,
     RATED_FREQUENCY_REVERSE,
+    RATED_VOLTAGE_MAP,
     RATED_VOLTAGE_REVERSE,
 )
-from .entity import inverter_device_info
+from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,11 +99,11 @@ class _BaseSelect(SolarOfThingsDeviceEntity, SelectEntity):
     _setting_key: str
     _option_values: dict[str, int]
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        return inverter_device_info(
-            self.coordinator.data, self._station_id, self._device_id, self._device_name
-        )
+    async def async_select_option(self, option: str) -> None:
+        value = self._option_values.get(option)
+        if value is None:
+            raise HomeAssistantError(f"Unsupported option {option!r}")
+        await self._async_write_setting(self._setting_key, value)
 
     def _get_setting_value(self, key: str) -> int | None:
         """Extract the integer value for a device setting key from coordinator data."""

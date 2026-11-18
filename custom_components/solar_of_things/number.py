@@ -17,11 +17,10 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import inverter_device_info
+from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -123,11 +122,12 @@ class _BaseNumber(SolarOfThingsDeviceEntity, NumberEntity):
     # None -> write as int; N -> write as float rounded to N decimals
     _value_decimals: int | None = None
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        return inverter_device_info(
-            self.coordinator.data, self._station_id, self._device_id, self._device_name
-        )
+    async def async_set_native_value(self, value: float) -> None:
+        if self._value_decimals is None:
+            raw: float | int = int(value)
+        else:
+            raw = round(value, self._value_decimals)
+        await self._async_write_setting(self._setting_key, raw)
 
     @property
     def native_value(self):

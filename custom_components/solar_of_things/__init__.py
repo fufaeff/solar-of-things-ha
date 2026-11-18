@@ -55,9 +55,8 @@ from .const import (
 from .entity import (
     device_identifier,
     legacy_device_identifier,
-    station_device_info,
+    station_device_fields,
 )
-from .entity import station_device_fields
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,13 +155,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     station_id = entry.data[CONF_STATION_ID]
     configured_device_id = (entry.data.get(CONF_DEVICE_ID) or "").strip()
 
-    # Register the station (parent) device first so per-device entities can
-    # link to it through via_device_id.
-    station_device = dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        **station_device_fields(station_id),
-    )
-
     # ── Station coordinator (device list + monthly) ────────────────────────────
     station_coordinator = SolarOfThingsStationCoordinator(
         hass=hass,
@@ -198,7 +190,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             device=device_id,
             device_meta=dev,
             entry=entry,
-            station_device_id=station_device.id,
         )
         await c.async_config_entry_first_refresh()
         device_coordinators[device_id] = c
@@ -206,14 +197,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "station_id": station_id,
-        "station_device_id": station_device.id,
         "station_coordinator": station_coordinator,
         "device_coordinators": device_coordinators,
         "devices": devices,
         "reload_snapshot": _reload_snapshot(entry),
     }
 
-    _async_setup_devices(hass, entry, station_id, device_coordinators)
+    station_device_id = _async_setup_devices(
+        hass, entry, station_id, device_coordinators
+    )
+    for coordinator in device_coordinators.values():
+        coordinator.station_device_id = station_device_id
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
@@ -247,8 +241,10 @@ def _async_setup_devices(
     entry: ConfigEntry,
     station_id: str,
     device_ids: Iterable[str],
-) -> None:
+) -> str:
     """Register the station device and migrate legacy device identifiers.
+
+    Returns the station's device-registry id (for via_device_id).
 
     The station must exist before inverter entities reference it through
     ``via_device``.  Before v2.5.0 inverters used an invalid 3-tuple
@@ -256,8 +252,8 @@ def _async_setup_devices(
     stay attached to the same device.
     """
     dev_reg = dr.async_get(hass)
-    dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id, **station_device_info(station_id)
+    station_device = dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id, **station_device_fields(station_id)
     )
 
     for device_id in device_ids:
@@ -275,6 +271,8 @@ def _async_setup_devices(
             new_identifier,
         )
         dev_reg.async_update_device(legacy.id, new_identifiers={new_identifier})
+
+    return station_device.id
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -364,16 +362,18 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         device: str,
         device_meta: dict[str, Any],
         entry: ConfigEntry,
-        station_device_id: str | None = None,
     ) -> None:
         self.api = api
         self.station_id = station_id
         self.device_id = device
         self.device_meta = device_meta
-        self.station_device_id = station_device_id
+        # Station device-registry id, set by async_setup_entry before platforms load
+        self.station_device_id: str | None = None
         self._entry = entry
         self._is_first_refresh = True
         self._stale_updates = 0
+        # setting key -> (written value, expiry) for optimistic state
+        self._pending_settings: dict[str, tuple[Any, Any]] = {}
         interval_min = entry.options.get("update_interval", 1)
         super().__init__(
             hass,
@@ -421,7 +421,8 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         result = dict(settings)
         for key, (value, expires) in list(self._pending_settings.items()):
             if expires <= now or (
-                confirmed and _setting_values_equal(_setting_raw(settings.get(key)), value)
+                confirmed
+                and _setting_values_equal(_setting_raw(settings.get(key)), value)
             ):
                 del self._pending_settings[key]
                 continue
@@ -527,10 +528,12 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         # Retrieve settings from fast cached cloud endpoint.  Settings change
         # rarely, so carrying over the previous values is harmless.
         settings: dict[str, Any] = {}
+        settings_fresh = False
         try:
             settings = await self.hass.async_add_executor_job(
                 self.api.fetch_settings, self.device_id
             )
+            settings_fresh = bool(settings)
         except TokenExpiredError:
             raise
         except Exception as set_err:
@@ -552,6 +555,7 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
                 settings = await self.hass.async_add_executor_job(
                     self.api.fetch_settings_batch, self.device_id
                 )
+                settings_fresh = bool(settings)
             except TokenExpiredError:
                 raise
             except Exception as batch_err:
@@ -566,7 +570,9 @@ class SolarOfThingsDeviceCoordinator(DataUpdateCoordinator):
         return {
             "time_series": time_series,
             "latest_state": latest_state,
-            "settings": settings,
+            "settings": self._apply_pending_settings(
+                settings, confirmed=settings_fresh
+            ),
             "device": self.device_id,
             "station_id": self.station_id,
             "device_meta": self.device_meta,
