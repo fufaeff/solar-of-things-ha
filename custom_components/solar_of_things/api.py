@@ -98,9 +98,6 @@ from .const import (
     IOT_APP_ID,
     IOT_APP_SECRET_ENC,
     MONTHLY_SUMMARY_KEYS,
-    OUTPUT_MODE_MAP,
-    RATED_FREQUENCY_MAP,
-    RATED_VOLTAGE_MAP,
     TIME_SERIES_MAX_POINTS,
     TIME_SERIES_WINDOW_MINUTES,
     TOKEN_INVALID_CODES,
@@ -130,6 +127,10 @@ class TokenExpiredError(Exception):
 
 class AuthenticationError(Exception):
     """Raised when login credentials are rejected by the server."""
+
+
+class SettingsWriteError(RuntimeError):
+    """Raised when the cloud accepts the request but rejects the setting value."""
 
 
 def _is_ok_code(code: Any) -> bool:
@@ -368,7 +369,7 @@ class SolarOfThingsAPI:
                 "Origin": "https://solar.siseli.com",
                 "Referer": "https://solar.siseli.com/",
                 "User-Agent": (
-                    "HomeAssistant-SolarOfThings/2.5.1 "
+                    "HomeAssistant-SolarOfThings/2.5.2 "
                     "(+https://github.com/fufaeff/solar-of-things-ha)"
                 ),
             }
@@ -585,9 +586,6 @@ class SolarOfThingsAPI:
         Thread-safe: uses a lock so parallel coordinator updates don't
         trigger multiple simultaneous refresh calls.
 
-        force=True skips the expiry check; used after the server answered 401
-        even though the token looked valid locally.
-
         Raises TokenExpiredError when all refresh strategies are exhausted.
         """
         if not force and not self._token_needs_refresh():
@@ -683,19 +681,7 @@ class SolarOfThingsAPI:
                 )
 
         resp.raise_for_status()
-        return resp
-
-    def _post(
-        self, path: str, payload: dict[str, Any], *, timeout: int = 30
-    ) -> dict[str, Any]:
-        """Perform a POST to a data endpoint, automatically refreshing the token on 401.
-
-        On second 401 (after refresh) raises TokenExpiredError.
-        Uses API_BASE_URL (solar.siseli.com) — not the auth base URL.
-        """
-        return self._send(
-            "POST", f"{API_BASE_URL}{path}", json=payload, timeout=timeout
-        ).json()
+        return resp.json()
 
     def _post(
         self, path: str, payload: dict[str, Any], *, timeout: int = 30
@@ -1076,14 +1062,19 @@ class SolarOfThingsAPI:
 
         return states
 
-    def _write_setting(self, device_id: str, key: str, value: Any) -> None:
-        """Write a single device setting key=value via the remote config write API."""
+    def write_setting(self, device_id: str, key: str, value: Any) -> None:
+        """Write a single device setting key=value via the remote config write API.
+
+        Raises TokenExpiredError on unrecoverable auth failure, SettingsWriteError
+        when the cloud rejects the value, requests.RequestException on transport
+        errors.
+        """
         payload = {"deviceId": device_id, "key": key, "value": value}
         data = self._request(
             "POST", API_SETTINGS_SET, params={"deviceId": device_id}, json=payload
         )
         if not _is_ok_code(data.get("code")):
-            raise RuntimeError(
+            raise SettingsWriteError(
                 f"Settings write error code={data.get('code')} "
                 f"message={data.get('message')} (key={key})"
             )

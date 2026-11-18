@@ -1,3 +1,43 @@
+## [2.5.2] - 2026-11-18
+
+### Fixed
+- **Integration failed to load on `master` after merging #1**: the merge mixed both sides of
+  `entity.py`, `switch.py`, `select.py` and `number.py`, leaving undefined names and a
+  missing `station_device_fields` import. Conflicts are now resolved properly.
+- **Controls flipping back after a change**: a written value is shown right away and kept
+  until the cloud settings cache reports it (up to 5 minutes), instead of reverting on the
+  next poll.
+- **Clear errors on failed writes**: switch, number and select actions raise a
+  `HomeAssistantError` with a readable message (value rejected, cloud unreachable, auth
+  expired) instead of a raw `RuntimeError`/`HTTPError`; an expired token starts re-auth.
+- **Backup Mode switch overwrote the output priority**: turning it off always wrote SUB,
+  even when the inverter had been in USB, and even when SBU was not active. It now restores
+  the priority that was active before SBU (kept across restarts, SUB if unknown) and does
+  nothing when SBU is not active.
+
+### Breaking
+- **`Grid Charging (AC Input Range)` switch replaced by the `AC Input Range` select**
+  (`Appliance (APL)` / `UPS`). The setting (`acInputRangeSetting`) is the AC input voltage
+  window, not grid charging; grid charging is controlled by `Charger Source Priority`.
+  The old `switch.*_grid_charging` entity is removed automatically; update automations and
+  dashboards that used it.
+
+### Changed
+- Inverter devices link to the station with `via_device_id` on HA 2026.8+ (`via_device` is
+  deprecated there and removed in 2027.8); older versions keep `via_device`.
+- **Translated control names**: switches, numbers and selects use `has_entity_name` with
+  translation keys; names are localized (English and Russian). Entity IDs are unchanged.
+- **Entity categories**: device-configuration controls (display, buzzer, protection toggles,
+  battery profile voltages and equalization, battery type, output frequency/voltage, grid
+  connection type, AC input range) are configuration entities and no longer appear on
+  auto-generated dashboards.
+- Shared base entity in `entity.py` performs all setting writes; the nine 0/1 toggle switches
+  are built from one table (`TOGGLE_SWITCHES`); Backup Mode has its own icon.
+- `api.py`: `_write_setting` is now public `write_setting` and raises `SettingsWriteError`
+  when the cloud rejects a value; removed 36 unused `set_*` helpers and
+  `update_device_settings`, the outdated `NUMBER_SETTING_DEFINITIONS` /
+  `TOGGLE_SETTING_DEFINITIONS` and stale entity translation keys.
+
 ## [2.5.1] - 2026-11-17
 
 ### Fixed

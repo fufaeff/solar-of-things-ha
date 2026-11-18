@@ -7,13 +7,14 @@ from typing import NamedTuple
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
-from .entity import inverter_device_info
+from .const import DOMAIN, OUTPUT_MODE_MAP, OUTPUT_MODE_REVERSE, OUTPUT_MODE_SBU
+from .entity import SolarOfThingsDeviceEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,58 +97,8 @@ def _setting_value(coordinator_data: dict | None, key: str) -> int | None:
         return None
 
 
-class _BaseSwitch(CoordinatorEntity, SwitchEntity):
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(coordinator)
-        self._api = api
-        self._station_id = station_id
-        self._device_id = device_id
-        self._device_name = device_name
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return inverter_device_info(
-            self.coordinator.data, self._station_id, self._device_id, self._device_name
-        )
-
-
-class SolarOfThingsGridChargingSwitch(_BaseSwitch):
-    """Switch for AC Input Range setting (acInputRangeSetting).
-
-    0 = Appliance mode – wide input voltage range, grid charging allowed.
-    1 = UPS mode – narrow voltage range, stricter bypass behaviour.
-    The switch reports ON when the inverter is in Appliance (grid-charging) mode.
-    """
-
-    def __init__(
-        self, api, coordinator, station_id: str, device_id: str, device_name: str
-    ) -> None:
-        super().__init__(api, coordinator, station_id, device_id, device_name)
-        self._attr_name = f"{device_name} Grid Charging (AC Input Range)"
-        self._attr_unique_id = f"{DOMAIN}_{station_id}_{device_id}_grid_charging"
-        self._attr_device_class = SwitchDeviceClass.SWITCH
-        self._attr_icon = "mdi:transmission-tower"
-
-    @property
-    def is_on(self) -> bool | None:
-        val = _setting_value(self.coordinator.data, "acInputRangeSetting")
-        if val is None:
-            return None
-        return val == 0  # 0=Appliance (charging OK), 1=UPS (bypass)
-
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_charging, self._device_id, True
-        )
-        await self.coordinator.async_request_refresh()
-
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.set_grid_charging, self._device_id, False
-        )
-        await self.coordinator.async_request_refresh()
+class _BaseSwitch(SolarOfThingsDeviceEntity, SwitchEntity):
+    """Base class for Solar of Things switches."""
 
 
 class SolarOfThingsGridFeedInSwitch(_BaseSwitch):

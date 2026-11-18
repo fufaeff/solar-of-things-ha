@@ -10,6 +10,7 @@ import pytest
 
 from custom_components.solar_of_things.api import (
     AuthenticationError,
+    SettingsWriteError,
     SolarOfThingsAPI,
     TokenExpiredError,
     _compute_iot_sign,
@@ -296,7 +297,7 @@ def test_write_setting_sends_key_and_value(requests_mock) -> None:
     requests_mock.post(SETTINGS_SET_URL, json={"code": 0})
     api = SolarOfThingsAPI(iot_token="t")
 
-    api.set_eco_mode("dev", True)
+    api.write_setting("dev", "ecoMode", 1)
 
     request = requests_mock.request_history[0]
     assert request.qs == {"deviceid": ["dev"]}
@@ -307,8 +308,8 @@ def test_write_setting_error_code_raises(requests_mock) -> None:
     requests_mock.post(SETTINGS_SET_URL, json={"code": 500, "message": "fail"})
     api = SolarOfThingsAPI(iot_token="t")
 
-    with pytest.raises(RuntimeError):
-        api.set_eco_mode("dev", False)
+    with pytest.raises(SettingsWriteError):
+        api.write_setting("dev", "ecoMode", 0)
 
 
 # ─── Monthly summary ───────────────────────────────────────────────────────────
