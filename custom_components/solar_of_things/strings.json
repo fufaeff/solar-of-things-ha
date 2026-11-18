@@ -10,7 +10,7 @@
       },
       "password": {
         "title": "Solar of Things — User ID + Password",
-        "description": "Enter your Siseli portal login credentials.\n\n- **User ID**: your account/login name on https://solar.siseli.com\n- **Password**: your Siseli portal password\n- **Station ID**: optional — automatically discovered if left blank\n- **Device ID**: optional — leave blank to auto-discover all devices under the station\n- **Time zone**: must match your inverter's configured time zone\n\nMore info: {docs_url}",
+        "description": "Enter your Siseli portal login credentials.\n\n- **User ID**: your account/login name on {portal_url}\n- **Password**: your Siseli portal password\n- **Station ID**: optional — automatically discovered if left blank\n- **Device ID**: optional — leave blank to auto-discover all devices under the station\n- **Time zone**: must match your inverter's configured time zone\n\nMore info: {docs_url}",
         "data": {
           "password": "Password",
           "station_id": "Station ID (optional — auto-discovered if blank)",
@@ -21,7 +21,7 @@
       },
       "token": {
         "title": "Solar of Things — IOT Token",
-        "description": "Enter an IOT-Token from https://solar.siseli.com (DevTools → Network → request headers).\n\nNote: tokens expire. When expired you will be prompted to enter a new one.\n\nMore info: {docs_url}",
+        "description": "Enter an IOT-Token from {portal_url} (DevTools → Network → request headers).\n\nNote: tokens expire. When expired you will be prompted to enter a new one.\n\nMore info: {docs_url}",
         "data": {
           "iot_token": "IOT Token",
           "station_id": "Station ID (optional — auto-discovered if blank)",
